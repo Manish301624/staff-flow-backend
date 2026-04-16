@@ -3,20 +3,33 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: StaffFlow API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: employees
+    description: Employee management
+  - name: attendance
+    description: Attendance tracking
+  - name: payments
+    description: Salary and payment management
+  - name: tasks
+    description: Task management
+  - name: reports
+    description: Reports and analytics
+  - name: dashboard
+    description: Dashboard summary data
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +37,525 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginBody"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterBody"
+      responses:
+        "201":
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+
+  /employees:
+    get:
+      operationId: listEmployees
+      tags: [employees]
+      summary: List all employees
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: role
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of employees
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Employee"
+    post:
+      operationId: createEmployee
+      tags: [employees]
+      summary: Create an employee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEmployeeBody"
+      responses:
+        "201":
+          description: Employee created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+
+  /employees/{id}:
+    get:
+      operationId: getEmployee
+      tags: [employees]
+      summary: Get employee by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Employee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateEmployee
+      tags: [employees]
+      summary: Update employee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEmployeeBody"
+      responses:
+        "200":
+          description: Updated employee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+    delete:
+      operationId: deleteEmployee
+      tags: [employees]
+      summary: Delete employee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /attendance:
+    get:
+      operationId: listAttendance
+      tags: [attendance]
+      summary: List attendance records
+      parameters:
+        - name: employeeId
+          in: query
+          schema:
+            type: integer
+        - name: month
+          in: query
+          schema:
+            type: integer
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: date
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Attendance records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Attendance"
+    post:
+      operationId: markAttendance
+      tags: [attendance]
+      summary: Mark attendance for one or more employees
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkAttendanceBody"
+      responses:
+        "200":
+          description: Attendance marked
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Attendance"
+
+  /attendance/{id}:
+    patch:
+      operationId: updateAttendance
+      tags: [attendance]
+      summary: Update attendance record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAttendanceBody"
+      responses:
+        "200":
+          description: Updated attendance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attendance"
+
+  /attendance/summary:
+    get:
+      operationId: getAttendanceSummary
+      tags: [attendance]
+      summary: Get attendance summary for a month
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: employeeId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Attendance summary
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceSummary"
+
+  /payments:
+    get:
+      operationId: listPayments
+      tags: [payments]
+      summary: List payments
+      parameters:
+        - name: employeeId
+          in: query
+          schema:
+            type: integer
+        - name: month
+          in: query
+          schema:
+            type: integer
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: type
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Payments list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Payment"
+    post:
+      operationId: createPayment
+      tags: [payments]
+      summary: Create a payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePaymentBody"
+      responses:
+        "201":
+          description: Payment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  /payments/{id}:
+    patch:
+      operationId: updatePayment
+      tags: [payments]
+      summary: Update payment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePaymentBody"
+      responses:
+        "200":
+          description: Updated payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+    delete:
+      operationId: deletePayment
+      tags: [payments]
+      summary: Delete payment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /payments/salary-summary:
+    get:
+      operationId: getSalarySummary
+      tags: [payments]
+      summary: Get salary summary for a month
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Salary summary
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SalarySummary"
+
+  /tasks:
+    get:
+      operationId: listTasks
+      tags: [tasks]
+      summary: List tasks
+      parameters:
+        - name: employeeId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tasks list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+    post:
+      operationId: createTask
+      tags: [tasks]
+      summary: Create a task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaskBody"
+      responses:
+        "201":
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /tasks/{id}:
+    patch:
+      operationId: updateTask
+      tags: [tasks]
+      summary: Update task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTaskBody"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+    delete:
+      operationId: deleteTask
+      tags: [tasks]
+      summary: Delete task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Get dashboard stats
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /dashboard/insights:
+    get:
+      operationId: getSmartInsights
+      tags: [dashboard]
+      summary: Get smart insights
+      responses:
+        "200":
+          description: Smart insights
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Insight"
+
+  /dashboard/attendance-trend:
+    get:
+      operationId: getAttendanceTrend
+      tags: [dashboard]
+      summary: Get attendance trend for last 7 days
+      responses:
+        "200":
+          description: Attendance trend
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceTrendDay"
+
+  /reports/monthly:
+    get:
+      operationId: getMonthlyReport
+      tags: [reports]
+      summary: Get monthly report
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Monthly report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlyReport"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +566,555 @@ components:
       required:
         - status
 
+    LoginBody:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    RegisterBody:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        companyName:
+          type: string
+      required:
+        - name
+        - email
+        - password
+        - companyName
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        companyName:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - email
+        - role
+        - companyName
+        - createdAt
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - token
+        - user
+
+    Employee:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: ["string", "null"]
+        role:
+          type: string
+        department:
+          type: ["string", "null"]
+        salary:
+          type: number
+        salaryType:
+          type: string
+          description: monthly or daily
+        joiningDate:
+          type: string
+        status:
+          type: string
+          description: active or inactive
+        adminId:
+          type: integer
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - phone
+        - role
+        - salary
+        - salaryType
+        - joiningDate
+        - status
+        - adminId
+        - createdAt
+
+    CreateEmployeeBody:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: ["string", "null"]
+        role:
+          type: string
+        department:
+          type: ["string", "null"]
+        salary:
+          type: number
+        salaryType:
+          type: string
+        joiningDate:
+          type: string
+      required:
+        - name
+        - phone
+        - role
+        - salary
+        - salaryType
+        - joiningDate
+
+    UpdateEmployeeBody:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: ["string", "null"]
+        role:
+          type: string
+        department:
+          type: ["string", "null"]
+        salary:
+          type: number
+        salaryType:
+          type: string
+        joiningDate:
+          type: string
+        status:
+          type: string
+
+    Attendance:
+      type: object
+      properties:
+        id:
+          type: integer
+        employeeId:
+          type: integer
+        employeeName:
+          type: string
+        date:
+          type: string
+        status:
+          type: string
+          description: present, absent, half_day
+        checkIn:
+          type: ["string", "null"]
+        checkOut:
+          type: ["string", "null"]
+        note:
+          type: ["string", "null"]
+        overtimeHours:
+          type: ["number", "null"]
+        latitude:
+          type: ["number", "null"]
+        longitude:
+          type: ["number", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - employeeId
+        - employeeName
+        - date
+        - status
+        - createdAt
+
+    MarkAttendanceBody:
+      type: object
+      properties:
+        records:
+          type: array
+          items:
+            type: object
+            properties:
+              employeeId:
+                type: integer
+              date:
+                type: string
+              status:
+                type: string
+              checkIn:
+                type: ["string", "null"]
+              checkOut:
+                type: ["string", "null"]
+              note:
+                type: ["string", "null"]
+              overtimeHours:
+                type: ["number", "null"]
+              latitude:
+                type: ["number", "null"]
+              longitude:
+                type: ["number", "null"]
+            required:
+              - employeeId
+              - date
+              - status
+      required:
+        - records
+
+    UpdateAttendanceBody:
+      type: object
+      properties:
+        status:
+          type: string
+        checkIn:
+          type: ["string", "null"]
+        checkOut:
+          type: ["string", "null"]
+        note:
+          type: ["string", "null"]
+        overtimeHours:
+          type: ["number", "null"]
+
+    AttendanceSummary:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        employeeName:
+          type: string
+        present:
+          type: integer
+        absent:
+          type: integer
+        halfDay:
+          type: integer
+        overtime:
+          type: number
+        workingDays:
+          type: integer
+        percentage:
+          type: number
+      required:
+        - employeeId
+        - employeeName
+        - present
+        - absent
+        - halfDay
+        - overtime
+        - workingDays
+        - percentage
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: integer
+        employeeId:
+          type: integer
+        employeeName:
+          type: string
+        amount:
+          type: number
+        type:
+          type: string
+          description: salary, advance, bonus, deduction
+        method:
+          type: string
+          description: cash, upi, bank
+        month:
+          type: ["integer", "null"]
+        year:
+          type: ["integer", "null"]
+        note:
+          type: ["string", "null"]
+        status:
+          type: string
+          description: paid, pending
+        paidAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - employeeId
+        - employeeName
+        - amount
+        - type
+        - method
+        - status
+        - createdAt
+
+    CreatePaymentBody:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        amount:
+          type: number
+        type:
+          type: string
+        method:
+          type: string
+        month:
+          type: ["integer", "null"]
+        year:
+          type: ["integer", "null"]
+        note:
+          type: ["string", "null"]
+        status:
+          type: string
+      required:
+        - employeeId
+        - amount
+        - type
+        - method
+        - status
+
+    UpdatePaymentBody:
+      type: object
+      properties:
+        amount:
+          type: number
+        type:
+          type: string
+        method:
+          type: string
+        note:
+          type: ["string", "null"]
+        status:
+          type: string
+
+    SalarySummary:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        employeeName:
+          type: string
+        baseSalary:
+          type: number
+        salaryType:
+          type: string
+        workingDays:
+          type: integer
+        presentDays:
+          type: integer
+        halfDays:
+          type: integer
+        overtimeHours:
+          type: number
+        overtimePay:
+          type: number
+        deductions:
+          type: number
+        advances:
+          type: number
+        netSalary:
+          type: number
+        paid:
+          type: number
+        pending:
+          type: number
+      required:
+        - employeeId
+        - employeeName
+        - baseSalary
+        - salaryType
+        - workingDays
+        - presentDays
+        - halfDays
+        - overtimeHours
+        - overtimePay
+        - deductions
+        - advances
+        - netSalary
+        - paid
+        - pending
+
+    Task:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        employeeId:
+          type: integer
+        employeeName:
+          type: string
+        status:
+          type: string
+          description: pending, in_progress, done
+        priority:
+          type: string
+          description: low, medium, high
+        dueDate:
+          type: ["string", "null"]
+        proofUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - title
+        - employeeId
+        - employeeName
+        - status
+        - priority
+        - createdAt
+
+    CreateTaskBody:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        employeeId:
+          type: integer
+        priority:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+      required:
+        - title
+        - employeeId
+        - priority
+
+    UpdateTaskBody:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        status:
+          type: string
+        priority:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        proofUrl:
+          type: ["string", "null"]
+
+    DashboardStats:
+      type: object
+      properties:
+        totalEmployees:
+          type: integer
+        presentToday:
+          type: integer
+        absentToday:
+          type: integer
+        halfDayToday:
+          type: integer
+        totalSalaryThisMonth:
+          type: number
+        totalPaidThisMonth:
+          type: number
+        pendingDues:
+          type: number
+        activeTasks:
+          type: integer
+      required:
+        - totalEmployees
+        - presentToday
+        - absentToday
+        - halfDayToday
+        - totalSalaryThisMonth
+        - totalPaidThisMonth
+        - pendingDues
+        - activeTasks
+
+    Insight:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          description: info, warning, success, alert
+        message:
+          type: string
+        metric:
+          type: ["string", "null"]
+      required:
+        - id
+        - type
+        - message
+
+    AttendanceTrendDay:
+      type: object
+      properties:
+        date:
+          type: string
+        present:
+          type: integer
+        absent:
+          type: integer
+        halfDay:
+          type: integer
+      required:
+        - date
+        - present
+        - absent
+        - halfDay
+
+    MonthlyReport:
+      type: object
+      properties:
+        month:
+          type: integer
+        year:
+          type: integer
+        totalEmployees:
+          type: integer
+        totalWorkingDays:
+          type: integer
+        totalSalaryPaid:
+          type: number
+        totalPending:
+          type: number
+        attendanceRate:
+          type: number
+        employees:
+          type: array
+          items:
+            $ref: "#/components/schemas/SalarySummary"
+      required:
+        - month
+        - year
+        - totalEmployees
+        - totalWorkingDays
+        - totalSalaryPaid
+        - totalPending
+        - attendanceRate
+        - employees

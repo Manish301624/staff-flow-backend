@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "StaffFlow"
+version = "1.0.0"
+id = "artifacts/staffflow"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22380
+
+[services.development]
+run = "pnpm --filter @workspace/staffflow run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/staffflow", "run", "build" ]
+publicDir = "artifacts/staffflow/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22380"
+BASE_PATH = "/"
