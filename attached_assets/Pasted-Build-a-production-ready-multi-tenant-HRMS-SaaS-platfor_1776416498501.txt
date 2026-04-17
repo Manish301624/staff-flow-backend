@@ -1,0 +1,185 @@
+Build a production-ready multi-tenant HRMS SaaS platform named "StaffFlow".
+
+This is a modern workforce management system for Indian businesses including attendance, payroll, leave, and employee management.
+
+The UI must be premium and modern, NOT similar to PagarBook or SalaryBox.
+
+-----------------------------------
+🔷 BRANDING:
+
+Product Name: StaffFlow
+Tagline: "Smart Workforce. Simplified."
+
+Theme:
+- Primary: Indigo / Blue (#4F46E5)
+- Secondary: Slate Gray
+- Accent: Emerald (for success), Red (for alerts)
+
+-----------------------------------
+🔷 TECH STACK:
+
+Frontend:
+- Next.js (App Router)
+- TypeScript
+- Tailwind CSS
+- shadcn/ui
+- Framer Motion
+
+Backend:
+- Node.js (NestJS)
+
+Database:
+- PostgreSQL
+
+Mobile:
+- React Native (Expo)
+
+-----------------------------------
+🔷 CORE FEATURES:
+
+1. AUTH SYSTEM
+- OTP login (employee)
+- Email/password (admin)
+- PIN login for mobile
+- JWT auth
+
+-----------------------------------
+2. DASHBOARD (PREMIUM UI)
+
+Show KPI cards:
+- Total Employees
+- Present Today
+- Absent Today
+- Salary This Month
+
+Add:
+- Bar chart (attendance trend)
+- Pie chart (salary breakdown)
+
+-----------------------------------
+3. EMPLOYEE MANAGEMENT
+- Add/Edit/Delete employee
+- Fields:
+  - Name
+  - Phone
+  - Salary
+  - Department
+  - Role
+  - Joining date
+
+-----------------------------------
+4. ATTENDANCE SYSTEM
+- Punch in/out
+- GPS tracking
+- Geofencing
+- Selfie capture
+- QR attendance
+- Offline sync
+
+Statuses:
+- Present
+- Absent
+- Half Day
+- Late
+
+-----------------------------------
+5. LEAVE MANAGEMENT
+- Apply leave
+- Approval workflow
+- Leave balance
+- Holiday calendar
+
+-----------------------------------
+6. SHIFT MANAGEMENT
+- Fixed shift
+- Rotational shift
+- Weekly offs
+- Grace time rules
+
+-----------------------------------
+7. PAYROLL SYSTEM
+
+Earnings:
+- Basic
+- HRA
+- Bonus
+- Overtime
+- Incentives
+
+Deductions:
+- PF
+- ESI
+- PT
+- TDS
+- Loan
+- Advance
+
+Auto salary calculation based on attendance.
+
+Generate:
+- Payslip (PDF)
+- Salary summary
+
+-----------------------------------
+8. EMPLOYEE APP FEATURES
+- Attendance
+- Leave
+- Payslips
+- Profile
+
+-----------------------------------
+9. MANAGER FEATURES
+- Team attendance
+- Approvals
+- Reports
+
+-----------------------------------
+10. REPORTS
+- Attendance reports
+- Payroll reports
+- Export to Excel/PDF
+
+-----------------------------------
+11. NOTIFICATIONS
+- Push
+- Email
+- WhatsApp (mock API)
+
+-----------------------------------
+🎨 UI/UX (VERY IMPORTANT)
+
+Design must be modern SaaS style:
+
+- Sidebar navigation
+- Top header with search
+- Clean cards
+- Rounded corners
+- Soft shadows
+- Smooth animations
+
+DO NOT use outdated UI.
+
+Inspiration:
+- Stripe dashboard
+- Notion
+- Linear.app
+
+-----------------------------------
+🔥 DIFFERENTIATORS
+
+- Smart Insights:
+  - "5 employees late today"
+- Floating Quick Action button
+- Dark mode toggle
+- GPS map view
+
+-----------------------------------
+📦 DELIVERABLES:
+
+- Full frontend + backend code
+- API structure
+- Database schema
+- Mobile app screens
+- README with setup steps
+
+-----------------------------------

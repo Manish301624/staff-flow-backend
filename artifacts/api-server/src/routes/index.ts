@@ -7,6 +7,7 @@ import paymentsRouter from "./payments";
 import tasksRouter from "./tasks";
 import dashboardRouter from "./dashboard";
 import reportsRouter from "./reports";
+import leavesRouter from "./leaves";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(paymentsRouter);
 router.use(tasksRouter);
 router.use(dashboardRouter);
 router.use(reportsRouter);
+router.use(leavesRouter);
 
 export default router;

@@ -516,3 +516,118 @@ export const GetMonthlyReportResponse = zod.object({
     }),
   ),
 });
+
+/**
+ * @summary List all leaves
+ */
+export const ListLeavesQueryParams = zod.object({
+  employeeId: zod.coerce.number().optional(),
+  status: zod.coerce.string().optional(),
+  year: zod.coerce.number().optional(),
+});
+
+export const ListLeavesResponseItem = zod.object({
+  id: zod.number(),
+  employeeId: zod.number(),
+  employeeName: zod.string(),
+  type: zod.string(),
+  startDate: zod.string(),
+  endDate: zod.string(),
+  days: zod.number(),
+  reason: zod.string().nullish(),
+  status: zod.string(),
+  approverNote: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListLeavesResponse = zod.array(ListLeavesResponseItem);
+
+/**
+ * @summary Create a leave request
+ */
+export const CreateLeaveBody = zod.object({
+  employeeId: zod.number(),
+  type: zod.string(),
+  startDate: zod.string(),
+  endDate: zod.string(),
+  reason: zod.string().optional(),
+});
+
+/**
+ * @summary Approve a leave request
+ */
+export const ApproveLeaveParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ApproveLeaveBody = zod.object({
+  approverNote: zod.string().optional(),
+});
+
+export const ApproveLeaveResponse = zod.object({
+  id: zod.number(),
+  employeeId: zod.number(),
+  employeeName: zod.string(),
+  type: zod.string(),
+  startDate: zod.string(),
+  endDate: zod.string(),
+  days: zod.number(),
+  reason: zod.string().nullish(),
+  status: zod.string(),
+  approverNote: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Reject a leave request
+ */
+export const RejectLeaveParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RejectLeaveBody = zod.object({
+  approverNote: zod.string().optional(),
+});
+
+export const RejectLeaveResponse = zod.object({
+  id: zod.number(),
+  employeeId: zod.number(),
+  employeeName: zod.string(),
+  type: zod.string(),
+  startDate: zod.string(),
+  endDate: zod.string(),
+  days: zod.number(),
+  reason: zod.string().nullish(),
+  status: zod.string(),
+  approverNote: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Delete a leave request
+ */
+export const DeleteLeaveParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary Get leave balances for all employees
+ */
+export const GetLeaveBalancesQueryParams = zod.object({
+  year: zod.coerce.number().optional(),
+});
+
+export const GetLeaveBalancesResponseItem = zod.object({
+  employeeId: zod.number(),
+  employeeName: zod.string(),
+  year: zod.number(),
+  casual: zod.number(),
+  sick: zod.number(),
+  earned: zod.number(),
+  casualUsed: zod.number(),
+  sickUsed: zod.number(),
+  earnedUsed: zod.number(),
+  casualRemaining: zod.number(),
+  sickRemaining: zod.number(),
+  earnedRemaining: zod.number(),
+});
+export const GetLeaveBalancesResponse = zod.array(GetLeaveBalancesResponseItem);

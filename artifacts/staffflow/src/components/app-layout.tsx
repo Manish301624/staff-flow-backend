@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Users, CalendarCheck, DollarSign, CreditCard,
   ClipboardList, BarChart3, Settings, LogOut, Menu, X, Moon, Sun,
-  ChevronRight, Bell
+  ChevronRight, Bell, Umbrella
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useTheme } from "@/components/theme-provider";
@@ -19,6 +19,7 @@ const navItems = [
   { icon: CalendarCheck, label: "Attendance", href: "/attendance" },
   { icon: DollarSign, label: "Salary", href: "/salary" },
   { icon: CreditCard, label: "Payments", href: "/payments" },
+  { icon: Umbrella, label: "Leaves", href: "/leaves" },
   { icon: ClipboardList, label: "Tasks", href: "/tasks" },
   { icon: BarChart3, label: "Reports", href: "/reports" },
   { icon: Settings, label: "Settings", href: "/settings" },
@@ -137,7 +138,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </button>
           <div className="hidden lg:block">
             <h2 className="text-sm font-medium text-muted-foreground">
-              {navItems.find(n => location.startsWith(n.href))?.label || "StaffFlow"}
+              {navItems.find(n => n.href !== "/dashboard" ? location.startsWith(n.href) : location === n.href)?.label || "StaffFlow"}
             </h2>
           </div>
           <div className="flex items-center gap-2 ml-auto">

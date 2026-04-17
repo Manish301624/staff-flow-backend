@@ -15,6 +15,7 @@ import PaymentsPage from "@/pages/payments";
 import TasksPage from "@/pages/tasks";
 import ReportsPage from "@/pages/reports";
 import SettingsPage from "@/pages/settings";
+import LeavesPage from "@/pages/leaves";
 import AppLayout from "@/components/app-layout";
 
 const queryClient = new QueryClient({
@@ -62,6 +63,7 @@ function Router() {
       <Route path="/payments" component={() => <ProtectedRoute component={PaymentsPage} />} />
       <Route path="/tasks" component={() => <ProtectedRoute component={TasksPage} />} />
       <Route path="/reports" component={() => <ProtectedRoute component={ReportsPage} />} />
+      <Route path="/leaves" component={() => <ProtectedRoute component={LeavesPage} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={SettingsPage} />} />
       <Route path="/" component={() => <Redirect to="/dashboard" />} />
       <Route component={NotFound} />

@@ -24,6 +24,8 @@ tags:
     description: Reports and analytics
   - name: dashboard
     description: Dashboard summary data
+  - name: leaves
+    description: Leave management
 paths:
   /healthz:
     get:
@@ -555,6 +557,140 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MonthlyReport"
+
+  /leaves:
+    get:
+      operationId: listLeaves
+      tags: [leaves]
+      summary: List all leaves
+      parameters:
+        - name: employeeId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: year
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of leaves
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Leave"
+    post:
+      operationId: createLeave
+      tags: [leaves]
+      summary: Create a leave request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLeaveBody"
+      responses:
+        "201":
+          description: Leave created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Leave"
+
+  /leaves/{id}/approve:
+    patch:
+      operationId: approveLeave
+      tags: [leaves]
+      summary: Approve a leave request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                approverNote:
+                  type: string
+      responses:
+        "200":
+          description: Leave approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Leave"
+
+  /leaves/{id}/reject:
+    patch:
+      operationId: rejectLeave
+      tags: [leaves]
+      summary: Reject a leave request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                approverNote:
+                  type: string
+      responses:
+        "200":
+          description: Leave rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Leave"
+
+  /leaves/{id}:
+    delete:
+      operationId: deleteLeave
+      tags: [leaves]
+      summary: Delete a leave request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /leaves/balances:
+    get:
+      operationId: getLeaveBalances
+      tags: [leaves]
+      summary: Get leave balances for all employees
+      parameters:
+        - name: year
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Leave balances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaveBalance"
 
 components:
   schemas:
@@ -1118,3 +1254,100 @@ components:
         - totalPending
         - attendanceRate
         - employees
+
+    Leave:
+      type: object
+      properties:
+        id:
+          type: integer
+        employeeId:
+          type: integer
+        employeeName:
+          type: string
+        type:
+          type: string
+        startDate:
+          type: string
+        endDate:
+          type: string
+        days:
+          type: integer
+        reason:
+          type: ["string", "null"]
+        status:
+          type: string
+        approverNote:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - employeeId
+        - employeeName
+        - type
+        - startDate
+        - endDate
+        - days
+        - status
+        - createdAt
+
+    CreateLeaveBody:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        type:
+          type: string
+        startDate:
+          type: string
+        endDate:
+          type: string
+        reason:
+          type: string
+      required:
+        - employeeId
+        - type
+        - startDate
+        - endDate
+
+    LeaveBalance:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        employeeName:
+          type: string
+        year:
+          type: integer
+        casual:
+          type: integer
+        sick:
+          type: integer
+        earned:
+          type: integer
+        casualUsed:
+          type: integer
+        sickUsed:
+          type: integer
+        earnedUsed:
+          type: integer
+        casualRemaining:
+          type: integer
+        sickRemaining:
+          type: integer
+        earnedRemaining:
+          type: integer
+      required:
+        - employeeId
+        - employeeName
+        - year
+        - casual
+        - sick
+        - earned
+        - casualUsed
+        - sickUsed
+        - earnedUsed
+        - casualRemaining
+        - sickRemaining
+        - earnedRemaining
+

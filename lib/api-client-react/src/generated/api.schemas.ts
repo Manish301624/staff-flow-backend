@@ -288,6 +288,45 @@ export interface MonthlyReport {
   employees: SalarySummary[];
 }
 
+export interface Leave {
+  id: number;
+  employeeId: number;
+  employeeName: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  /** @nullable */
+  reason?: string | null;
+  status: string;
+  /** @nullable */
+  approverNote?: string | null;
+  createdAt: string;
+}
+
+export interface CreateLeaveBody {
+  employeeId: number;
+  type: string;
+  startDate: string;
+  endDate: string;
+  reason?: string;
+}
+
+export interface LeaveBalance {
+  employeeId: number;
+  employeeName: string;
+  year: number;
+  casual: number;
+  sick: number;
+  earned: number;
+  casualUsed: number;
+  sickUsed: number;
+  earnedUsed: number;
+  casualRemaining: number;
+  sickRemaining: number;
+  earnedRemaining: number;
+}
+
 export type ListEmployeesParams = {
   search?: string;
   role?: string;
@@ -326,4 +365,22 @@ export type ListTasksParams = {
 export type GetMonthlyReportParams = {
   month: number;
   year: number;
+};
+
+export type ListLeavesParams = {
+  employeeId?: number;
+  status?: string;
+  year?: number;
+};
+
+export type ApproveLeaveBody = {
+  approverNote?: string;
+};
+
+export type RejectLeaveBody = {
+  approverNote?: string;
+};
+
+export type GetLeaveBalancesParams = {
+  year?: number;
 };
