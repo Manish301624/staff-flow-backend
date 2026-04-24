@@ -1,0 +1,228 @@
+Build a production-ready multi-tenant HRMS SaaS platform named "StaffFlow" with complete authentication (Admin + Manager + Employee) and full payroll + attendance system.
+
+-----------------------------------
+🔷 TECH STACK:
+
+Frontend:
+- Next.js (App Router)
+- TypeScript
+- Tailwind CSS
+- shadcn/ui
+
+Backend:
+- Node.js (NestJS)
+
+Database:
+- PostgreSQL
+
+Auth:
+- JWT + OTP + optional PIN
+
+-----------------------------------
+🔷 USER ROLES:
+
+- Admin
+- Manager
+- Employee
+
+-----------------------------------
+🔷 AUTHENTICATION SYSTEM (IMPORTANT)
+
+1. ADMIN LOGIN:
+- Email + Password
+- JWT authentication
+
+-----------------------------------
+2. EMPLOYEE / MANAGER LOGIN:
+
+STEP 1: Enter Mobile Number  
+STEP 2: Send OTP (4-digit)  
+STEP 3: Verify OTP  
+STEP 4 (optional): Set 4-digit PIN  
+
+-----------------------------------
+🔷 OTP APIs:
+
+POST /auth/send-otp
+- Input: phone
+- Generate 4-digit OTP
+- Store with expiry (2 min)
+- Return success
+
+POST /auth/verify-otp
+- Input: phone, otp
+- Validate OTP
+- If valid:
+   - Find user in DB
+   - If not found → create user (default role = employee)
+   - Return JWT token + user
+
+-----------------------------------
+🔷 USER MODEL:
+
+- id
+- name
+- phone
+- email (admin only)
+- password (admin only)
+- role (admin / manager / employee)
+- pin (optional, hashed)
+- created_at
+
+-----------------------------------
+🔷 ROLE-BASED REDIRECT:
+
+After login:
+
+if role === "admin" → /admin-dashboard  
+if role === "manager" → /manager-dashboard  
+if role === "employee" → /employee-dashboard  
+
+-----------------------------------
+🔷 FRONTEND LOGIN PAGES:
+
+/admin-login  
+- Email + password form  
+
+/employee-login  
+- Step 1: Enter phone  
+- Step 2: Enter OTP  
+- Step 3: (optional) set PIN  
+
+-----------------------------------
+🔷 AUTH CONTEXT:
+
+- Store user + token
+- Functions:
+  - login()
+  - logout()
+- Persist token in localStorage
+
+-----------------------------------
+🔷 PROTECTED ROUTES:
+
+- If no user → redirect to login  
+- If wrong role → redirect to correct dashboard  
+
+-----------------------------------
+🔷 EMPLOYEE DASHBOARD:
+
+- Punch In / Punch Out button  
+- Attendance history  
+- Leave apply  
+- Salary view  
+- Notifications  
+
+-----------------------------------
+🔷 MANAGER DASHBOARD:
+
+- View team attendance  
+- Mark attendance  
+- Approve leave  
+- Team reports  
+
+-----------------------------------
+🔷 ADMIN DASHBOARD:
+
+- Manage employees  
+- View attendance  
+- Run payroll  
+- Manage payments  
+
+-----------------------------------
+🔷 ATTENDANCE MODULE:
+
+Employee:
+- Punch in/out
+
+Manager:
+- Mark attendance manually
+
+Fields:
+- employee_id
+- date
+- punch_in
+- punch_out
+- status
+- marked_by
+
+-----------------------------------
+🔷 PAYROLL ENGINE:
+
+- Fetch attendance
+- Calculate present days
+- Calculate payable days
+- Compute salary:
+
+per_day_salary = monthly_salary / total_days
+base_salary = per_day_salary * payable_days
+
+Add:
+- bonus
+- overtime
+
+Deduct:
+- PF, ESI, PT, TDS
+- loan, advance
+
+Final:
+net_salary = base + earnings - deductions
+
+-----------------------------------
+🔷 PAYMENT MODULE:
+
+- Add payment
+- Track paid vs pending
+
+pending = net_salary - total_paid
+
+-----------------------------------
+🔷 EMPLOYEE DETAIL (ADMIN):
+
+- Profile
+- Attendance summary
+- Salary breakdown
+- Payment history
+- Pending salary
+
+-----------------------------------
+🔷 NOTIFICATION SYSTEM:
+
+- Salary credited → employee  
+- Absent → manager  
+- Pending salary → admin  
+
+-----------------------------------
+🔷 SECURITY:
+
+- JWT auth
+- bcrypt hashing
+- OTP expiry
+- Role middleware
+
+-----------------------------------
+🔷 UI DESIGN:
+
+- Modern SaaS UI
+- Sidebar layout
+- Clean cards
+- Tabs (overview, attendance, payments)
+- Dark mode optional
+
+-----------------------------------
+🔷 DELIVERABLE:
+
+- Full backend (NestJS modules)
+- Frontend pages (Next.js)
+- OTP login system
+- Role-based dashboards
+- Payroll + payment engine
+- Database schema
+- Setup instructions
+
+-----------------------------------
+IMPORTANT:
+
+- Do NOT create basic UI
+- Make it premium SaaS style
+- Ensure scalability and clean code
