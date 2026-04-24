@@ -75,7 +75,7 @@ export default function TasksPage() {
       description: task.description || "",
       priority: task.priority,
       status: task.status,
-      assignedTo: task.assignedTo ? String(task.assignedTo) : "",
+      assignedTo: task.assignedTo ? String(task.assignedTo) : "unassigned",
       dueDate: task.dueDate || "",
     });
     setShowForm(true);
