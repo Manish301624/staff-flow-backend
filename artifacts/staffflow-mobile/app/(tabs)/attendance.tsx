@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator,
@@ -88,6 +89,7 @@ export default function AttendanceScreen() {
   const [bulkStatus, setBulkStatus] = useState("present");
   const [showFaceModal, setShowFaceModal] = useState(false);
 
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { data: attendance, isLoading } = useListAttendance({ month, year });
   const { data: summary } = useGetAttendanceSummary({ month, year });
@@ -359,8 +361,10 @@ export default function AttendanceScreen() {
         visible={showFaceModal}
         employees={(employees ?? []) as { id: number; name: string; role: string; department?: string | null }[]}
         onClose={() => setShowFaceModal(false)}
-        onSuccess={() => setShowFaceModal(false)}
-        onSubmit={handleFaceSubmit}
+        onSuccess={() => {
+          setShowFaceModal(false);
+          router.replace("/(tabs)/" as never);
+        }}
       />
 
       {/* Employee Picker */}

@@ -60,8 +60,10 @@ router.post(
       return;
     }
 
+    req.log.info({ employeeId }, "Face enrollment: running face detection");
     const descriptor = await detectFaceDescriptor(imageBase64);
     if (!descriptor) {
+      req.log.warn({ employeeId }, "Face enrollment: no face detected in image");
       res.status(422).json({
         error: "No face detected in the image. Please use a clear, front-facing photo.",
       });
@@ -84,7 +86,7 @@ router.post(
       })
       .where(eq(employeesTable.id, employeeId));
 
-    req.log.info({ employeeId }, "Face enrolled");
+    req.log.info({ employeeId, facePhotoUrl }, "Face enrolled successfully");
     res.json({ success: true, employeeId, facePhotoUrl });
   },
 );
@@ -118,6 +120,8 @@ router.post(
       return;
     }
 
+    req.log.info({ employeeId }, "Verify attendance: image received, detecting face");
+
     const [employee] = await db
       .select()
       .from(employeesTable)
@@ -138,6 +142,7 @@ router.post(
 
     const liveDescriptor = await detectFaceDescriptor(imageBase64);
     if (!liveDescriptor) {
+      req.log.warn({ employeeId }, "Verify attendance: no face detected in captured image");
       res.status(422).json({
         error: "No face detected in the captured image. Look directly at the camera.",
         code: "NO_FACE_DETECTED",
@@ -145,12 +150,17 @@ router.post(
       return;
     }
 
+    req.log.info({ employeeId }, "Face detected — running match");
+
     const { distance, matchScore, isMatch } = scoreFaces(
       employee.faceDescriptor,
       liveDescriptor,
     );
 
-    req.log.info({ employeeId, distance, matchScore, isMatch }, "Face verification result");
+    req.log.info(
+      { employeeId, distance, matchScore, isMatch },
+      `Match Score: ${matchScore}% — ${isMatch ? "MATCHED" : "NO MATCH"}`,
+    );
 
     if (!isMatch) {
       res.json({
@@ -162,8 +172,7 @@ router.post(
       return;
     }
 
-    const attendanceDate =
-      date ?? new Date().toISOString().slice(0, 10);
+    const attendanceDate = date ?? new Date().toISOString().slice(0, 10);
     const attendanceCheckIn =
       checkIn ??
       new Date().toLocaleTimeString("en-GB", {
@@ -171,22 +180,67 @@ router.post(
         minute: "2-digit",
       });
 
-    const [record] = await db
-      .insert(attendanceTable)
-      .values({
-        adminId,
-        employeeId,
-        date: attendanceDate,
-        status: "present",
-        checkIn: attendanceCheckIn,
-      })
-      .returning();
+    // Upsert: if an "absent" record exists for today, update it to "present".
+    // If a "present" record already exists, leave it (idempotent).
+    // Otherwise insert a new "present" record.
+    const existingRecords = await db
+      .select()
+      .from(attendanceTable)
+      .where(
+        and(
+          eq(attendanceTable.employeeId, employeeId),
+          eq(attendanceTable.date, attendanceDate),
+        ),
+      );
+
+    const absentRecord = existingRecords.find((r) => r.status === "absent");
+    const presentRecord = existingRecords.find((r) => r.status === "present");
+
+    let attendanceId: number;
+
+    if (presentRecord) {
+      // Already marked present today — idempotent success
+      attendanceId = presentRecord.id;
+      req.log.info(
+        { employeeId, attendanceId },
+        "Database Update Status: Already present — no change needed",
+      );
+    } else if (absentRecord) {
+      // Upgrade existing absent record to present
+      const [updated] = await db
+        .update(attendanceTable)
+        .set({ status: "present", checkIn: attendanceCheckIn })
+        .where(eq(attendanceTable.id, absentRecord.id))
+        .returning();
+      attendanceId = updated.id;
+      req.log.info(
+        { employeeId, attendanceId },
+        "Database Update Status: Success — absent → present",
+      );
+    } else {
+      // No record exists — insert new present record
+      const [record] = await db
+        .insert(attendanceTable)
+        .values({
+          adminId,
+          employeeId,
+          date: attendanceDate,
+          status: "present",
+          checkIn: attendanceCheckIn,
+        })
+        .returning();
+      attendanceId = record.id;
+      req.log.info(
+        { employeeId, attendanceId },
+        "Database Update Status: Success — new present record inserted",
+      );
+    }
 
     res.json({
       matched: true,
       matchScore,
       distance,
-      attendanceId: record.id,
+      attendanceId,
       employeeName: employee.name,
     });
   },
