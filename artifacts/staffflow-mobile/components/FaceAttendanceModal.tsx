@@ -125,10 +125,12 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
       const checkIn = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
       const result2 = await verifyAttendance({
-        employeeId: selected.id,
-        imageBase64,
-        date: today,
-        checkIn,
+        data: {
+          employeeId: selected.id,
+          imageBase64,
+          date: today,
+          checkIn,
+        },
       });
 
       setMatchScore(result2.matchScore);
