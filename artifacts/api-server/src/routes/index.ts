@@ -8,6 +8,7 @@ import tasksRouter from "./tasks";
 import dashboardRouter from "./dashboard";
 import reportsRouter from "./reports";
 import leavesRouter from "./leaves";
+import faceRouter from "./face";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(tasksRouter);
 router.use(dashboardRouter);
 router.use(reportsRouter);
 router.use(leavesRouter);
+router.use(faceRouter);
 
 export default router;

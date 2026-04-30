@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView, Alert,
 } from "react-native";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { EnrollFaceModal } from "@/components/EnrollFaceModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -31,8 +32,9 @@ const EMPTY_FORM: EmployeeForm = {
   salary: "", salaryType: "monthly", joiningDate: "", status: "active",
 };
 
-function EmployeeCard({ employee, colors, onEdit, onDelete }: { employee: any; colors: any; onEdit: (e: any) => void; onDelete: (id: number) => void }) {
+function EmployeeCard({ employee, colors, onEdit, onDelete, onEnroll }: { employee: any; colors: any; onEdit: (e: any) => void; onDelete: (id: number) => void; onEnroll: (e: any) => void }) {
   const isActive = employee.status === "active";
+  const isEnrolled = !!employee.facePhotoUrl;
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={[styles.avatar, { backgroundColor: colors.primary + "22" }]}>
@@ -41,7 +43,10 @@ function EmployeeCard({ employee, colors, onEdit, onDelete }: { employee: any; c
         </Text>
       </View>
       <View style={styles.cardInfo}>
-        <Text style={[styles.cardName, { color: colors.foreground }]} numberOfLines={1}>{employee.name}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Text style={[styles.cardName, { color: colors.foreground }]} numberOfLines={1}>{employee.name}</Text>
+          {isEnrolled && <Ionicons name="scan-circle" size={14} color="#16A34A" />}
+        </View>
         <Text style={[styles.cardRole, { color: colors.mutedForeground }]} numberOfLines={1}>
           {employee.role}{employee.department ? ` • ${employee.department}` : ""}
         </Text>
@@ -56,6 +61,9 @@ function EmployeeCard({ employee, colors, onEdit, onDelete }: { employee: any; c
           </Text>
         </View>
         <View style={styles.actionBtns}>
+          <Pressable onPress={() => onEnroll(employee)} hitSlop={8}>
+            <Ionicons name="scan-outline" size={16} color={isEnrolled ? "#16A34A" : colors.mutedForeground} />
+          </Pressable>
           <Pressable onPress={() => onEdit(employee)} hitSlop={8}>
             <Ionicons name="pencil-outline" size={16} color={colors.primary} />
           </Pressable>
@@ -81,6 +89,7 @@ export default function EmployeesScreen() {
   const updateEmployee = useUpdateEmployee();
   const deleteEmployee = useDeleteEmployee();
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [enrollTarget, setEnrollTarget] = useState<any | null>(null);
 
   const topPadding = Platform.OS === "web" ? 67 : 0;
 
@@ -185,7 +194,7 @@ export default function EmployeesScreen() {
           data={employees ?? []}
           keyExtractor={(e) => String(e.id)}
           renderItem={({ item }) => (
-            <EmployeeCard employee={item} colors={colors} onEdit={openEdit} onDelete={handleDelete} />
+            <EmployeeCard employee={item} colors={colors} onEdit={openEdit} onDelete={handleDelete} onEnroll={setEnrollTarget} />
           )}
           contentContainerStyle={[
             styles.list,
@@ -312,6 +321,13 @@ export default function EmployeesScreen() {
             deleteEmployee.mutate({ id: confirmDeleteId }, { onSuccess: () => { setConfirmDeleteId(null); refetch(); } });
           }
         }}
+      />
+
+      <EnrollFaceModal
+        visible={enrollTarget !== null}
+        employee={enrollTarget}
+        onClose={() => setEnrollTarget(null)}
+        onSuccess={() => { setEnrollTarget(null); refetch(); }}
       />
     </View>
   );

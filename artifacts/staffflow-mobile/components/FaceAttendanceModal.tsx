@@ -1,247 +1,162 @@
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View, Text, StyleSheet, Modal, Pressable, FlatList,
-  ActivityIndicator, Animated, Easing,
+  ActivityIndicator, Animated, Easing, Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
+import { useVerifyAttendance } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 
-type DetectionState = "idle" | "detecting" | "locking" | "processing" | "success" | "error";
+type VerifyStep =
+  | "pick"
+  | "capture"
+  | "matching"
+  | "success"
+  | "failed"
+  | "error";
 
-const LOCK_DELAY_MS = 1400;
-const SUCCESS_DISMISS_MS = 2000;
-
-const FRAME_COLORS: Record<DetectionState, string> = {
-  idle: "rgba(255,255,255,0.3)",
-  detecting: "#FBBF24",
-  locking: "#34D399",
-  processing: "#576DFA",
-  success: "#16A34A",
-  error: "#DC2626",
-};
-
-const STATUS_LABELS: Record<DetectionState, string> = {
-  idle: "Position your face inside the frame",
-  detecting: "Face detected — hold still…",
-  locking: "Verifying identity…",
-  processing: "Marking attendance…",
-  success: "Attendance marked!",
-  error: "Could not mark attendance. Try again.",
-};
-
-interface Employee { id: number; name: string; role: string; department?: string | null; }
+interface Employee {
+  id: number;
+  name: string;
+  role: string;
+  department?: string | null;
+  facePhotoUrl?: string | null;
+}
 
 interface Props {
   visible: boolean;
   employees: Employee[];
   onSuccess: () => void;
   onClose: () => void;
-  onSubmit: (employeeId: number) => Promise<void>;
 }
 
-function CornerBracket({ position, color }: { position: "tl" | "tr" | "bl" | "br"; color: string }) {
-  const SIZE = 30;
-  const THICK = 3;
-  const base: Record<string, number | string> = {
-    position: "absolute" as const,
-    width: SIZE, height: SIZE,
-    borderColor: color,
-    borderRadius: 4,
-  };
-  if (position === "tl") { base.top = 0; base.left = 0; base.borderRightWidth = 0; base.borderBottomWidth = 0; base.borderTopWidth = THICK; base.borderLeftWidth = THICK; }
-  if (position === "tr") { base.top = 0; base.right = 0; base.borderLeftWidth = 0; base.borderBottomWidth = 0; base.borderTopWidth = THICK; base.borderRightWidth = THICK; }
-  if (position === "bl") { base.bottom = 0; base.left = 0; base.borderRightWidth = 0; base.borderTopWidth = 0; base.borderBottomWidth = THICK; base.borderLeftWidth = THICK; }
-  if (position === "br") { base.bottom = 0; base.right = 0; base.borderLeftWidth = 0; base.borderTopWidth = 0; base.borderBottomWidth = THICK; base.borderRightWidth = THICK; }
-  return <View style={base as any} />;
-}
+const STEP_COLORS: Record<VerifyStep, string> = {
+  pick: "#576DFA",
+  capture: "#576DFA",
+  matching: "#FBBF24",
+  success: "#16A34A",
+  failed: "#DC2626",
+  error: "#DC2626",
+};
 
-function ScanAnimation({ state }: { state: DetectionState }) {
-  const ring1 = useRef(new Animated.Value(0)).current;
-  const ring2 = useRef(new Animated.Value(0)).current;
-  const scanLine = useRef(new Animated.Value(0)).current;
-  const glow = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const ripple = Animated.loop(
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(ring1, { toValue: 1, duration: 1800, useNativeDriver: true, easing: Easing.out(Easing.ease) }),
-          Animated.timing(ring1, { toValue: 0, duration: 0, useNativeDriver: true }),
-        ]),
-        Animated.sequence([
-          Animated.delay(600),
-          Animated.timing(ring2, { toValue: 1, duration: 1800, useNativeDriver: true, easing: Easing.out(Easing.ease) }),
-          Animated.timing(ring2, { toValue: 0, duration: 0, useNativeDriver: true }),
-        ]),
-      ])
-    );
-    const scan = Animated.loop(
-      Animated.sequence([
-        Animated.timing(scanLine, { toValue: 1, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-        Animated.timing(scanLine, { toValue: 0, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-      ])
-    );
-    const glowAnim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(glow, { toValue: 1, duration: 1000, useNativeDriver: true }),
-        Animated.timing(glow, { toValue: 0.3, duration: 1000, useNativeDriver: true }),
-      ])
-    );
-    ripple.start();
-    scan.start();
-    glowAnim.start();
-    return () => { ripple.stop(); scan.stop(); glowAnim.stop(); };
-  }, []);
-
-  const ring1Scale = ring1.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.4] });
-  const ring1Opacity = ring1.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0.8, 0.4, 0] });
-  const ring2Scale = ring2.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.4] });
-  const ring2Opacity = ring2.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0.8, 0.4, 0] });
-  const scanLineY = scanLine.interpolate({ inputRange: [0, 1], outputRange: [-FRAME_H / 2 + 20, FRAME_H / 2 - 20] });
-
-  const active = state !== "idle";
-  const frameColor = FRAME_COLORS[state];
-
-  return (
-    <View style={scan_styles.container}>
-      {/* Ripple rings */}
-      {active && (
-        <>
-          <Animated.View style={[scan_styles.ring, { borderColor: frameColor, transform: [{ scale: ring1Scale }], opacity: ring1Opacity }]} />
-          <Animated.View style={[scan_styles.ring, { borderColor: frameColor, transform: [{ scale: ring2Scale }], opacity: ring2Opacity }]} />
-        </>
-      )}
-
-      {/* Face icon */}
-      <Animated.View style={[scan_styles.faceIconBg, { opacity: glow, shadowColor: frameColor }]}>
-        <Ionicons
-          name={state === "success" ? "checkmark-circle" : state === "error" ? "close-circle" : "person-circle-outline"}
-          size={80}
-          color={frameColor}
-        />
-      </Animated.View>
-
-      {/* Scan line overlay */}
-      {active && state !== "processing" && state !== "success" && state !== "error" && (
-        <Animated.View style={[scan_styles.scanLine, { backgroundColor: frameColor, transform: [{ translateY: scanLineY }] }]} />
-      )}
-    </View>
-  );
-}
-
-const FRAME_W = 260;
-const FRAME_H = 320;
-
-const scan_styles = StyleSheet.create({
-  container: { width: FRAME_W, height: FRAME_H, alignItems: "center", justifyContent: "center" },
-  ring: {
-    position: "absolute",
-    width: FRAME_W - 20, height: FRAME_W - 20,
-    borderRadius: (FRAME_W - 20) / 2,
-    borderWidth: 2,
-  },
-  faceIconBg: {
-    shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 20, elevation: 10,
-  },
-  scanLine: {
-    position: "absolute",
-    left: 0, right: 0, height: 2, opacity: 0.6,
-  },
-});
-
-export function FaceAttendanceModal({ visible, employees, onSuccess, onClose, onSubmit }: Props) {
+export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: Props) {
   const colors = useColors();
-  const [step, setStep] = useState<"pick" | "camera">("pick");
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
-  const [detectionState, setDetectionState] = useState<DetectionState>("idle");
+  const queryClient = useQueryClient();
+  const [step, setStep] = useState<VerifyStep>("pick");
+  const [selected, setSelected] = useState<Employee | null>(null);
+  const [matchScore, setMatchScore] = useState<number>(0);
+  const [errorMsg, setErrorMsg] = useState<string>("");
+  const pulseAnim = useState(() => new Animated.Value(1))[0];
 
-  const submittedRef = useRef(false);
-  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  const frameColor = FRAME_COLORS[detectionState];
-
-  const clearLockTimer = () => {
-    if (lockTimerRef.current) { clearTimeout(lockTimerRef.current); lockTimerRef.current = null; }
-  };
+  const { mutateAsync: verifyAttendance } = useVerifyAttendance();
 
   useEffect(() => {
     if (!visible) {
       setStep("pick");
-      setSelectedEmployee(null);
-      setDetectionState("idle");
-      submittedRef.current = false;
-      clearLockTimer();
+      setSelected(null);
+      setMatchScore(0);
+      setErrorMsg("");
     }
   }, [visible]);
 
   useEffect(() => {
-    if (detectionState === "detecting" || detectionState === "locking") {
+    if (step === "matching") {
       const anim = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.06, duration: 600, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+          Animated.timing(pulseAnim, { toValue: 1.08, duration: 700, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
         ])
       );
       anim.start();
       return () => anim.stop();
-    } else {
-      pulseAnim.setValue(1);
     }
-  }, [detectionState]);
-
-  useEffect(() => {
-    if (detectionState === "success") {
-      Animated.spring(scaleAnim, { toValue: 1.1, useNativeDriver: true, friction: 4 }).start(() =>
-        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, friction: 4 }).start()
-      );
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      const t = setTimeout(() => onSuccess(), SUCCESS_DISMISS_MS);
-      return () => clearTimeout(t);
-    }
-  }, [detectionState]);
-
-  const triggerSubmit = useCallback(async () => {
-    if (submittedRef.current || !selectedEmployee) return;
-    submittedRef.current = true;
-    setDetectionState("processing");
-    clearLockTimer();
-    try {
-      await onSubmit(selectedEmployee.id);
-      setDetectionState("success");
-    } catch {
-      submittedRef.current = false;
-      setDetectionState("error");
-    }
-  }, [selectedEmployee, onSubmit]);
-
-  const handleDetectFace = () => {
-    if (submittedRef.current || detectionState !== "idle") return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setDetectionState("detecting");
-    lockTimerRef.current = setTimeout(() => {
-      setDetectionState("locking");
-      lockTimerRef.current = setTimeout(() => triggerSubmit(), 700);
-    }, LOCK_DELAY_MS);
-  };
-
-  const handleRetry = () => {
-    submittedRef.current = false;
-    setDetectionState("idle");
-    clearLockTimer();
-  };
+    pulseAnim.setValue(1);
+  }, [step]);
 
   const selectEmployee = (emp: Employee) => {
-    setSelectedEmployee(emp);
-    setStep("camera");
+    setSelected(emp);
+    setStep("capture");
   };
+
+  const handleCapture = useCallback(async () => {
+    if (!selected) return;
+
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted" && Platform.OS !== "web") {
+      setErrorMsg("Camera permission required.");
+      setStep("error");
+      return;
+    }
+
+    try {
+      const result = Platform.OS === "web"
+        ? await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.7,
+            base64: true,
+          })
+        : await ImagePicker.launchCameraAsync({
+            cameraType: ImagePicker.CameraType.front,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.7,
+            base64: true,
+          });
+
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const asset = result.assets[0];
+      if (!asset.base64) {
+        setErrorMsg("Could not read image data. Please try again.");
+        setStep("error");
+        return;
+      }
+
+      const imageBase64 = `data:image/jpeg;base64,${asset.base64}`;
+      setStep("matching");
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      const today = new Date().toISOString().slice(0, 10);
+      const checkIn = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+      const result2 = await verifyAttendance({
+        employeeId: selected.id,
+        imageBase64,
+        date: today,
+        checkIn,
+      });
+
+      setMatchScore(result2.matchScore);
+
+      if (result2.matched) {
+        setStep("success");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        await queryClient.invalidateQueries({ queryKey: ["listAttendance"] });
+        await queryClient.invalidateQueries({ queryKey: ["getAttendanceSummary"] });
+        setTimeout(() => onSuccess(), 2500);
+      } else {
+        setStep("failed");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.error ?? "An error occurred during verification.";
+      setErrorMsg(msg);
+      setStep("error");
+    }
+  }, [selected, verifyAttendance, queryClient, onSuccess]);
+
+  const stepColor = STEP_COLORS[step];
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <View style={[styles.root, { backgroundColor: "#060B18" }]}>
-        {/* ── Step 1: Pick employee ── */}
+
+        {/* Step 1: Pick employee */}
         {step === "pick" && (
           <View style={[styles.pickContainer, { backgroundColor: colors.background }]}>
             <View style={styles.pickHeader}>
@@ -256,7 +171,7 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose, on
                 <Ionicons name="scan" size={40} color="#16A34A" />
               </View>
               <Text style={[styles.pickSubtitle, { color: colors.mutedForeground }]}>
-                Select the employee to scan
+                Select an employee to verify
               </Text>
             </View>
             <FlatList
@@ -280,88 +195,149 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose, on
                       {item.role}{item.department ? ` • ${item.department}` : ""}
                     </Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+                  {item.facePhotoUrl ? (
+                    <View style={styles.enrolledDot}>
+                      <Ionicons name="checkmark-circle" size={18} color="#16A34A" />
+                    </View>
+                  ) : (
+                    <View style={styles.unenrolledDot}>
+                      <Ionicons name="alert-circle-outline" size={16} color="#FBBF24" />
+                    </View>
+                  )}
+                  <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
                 </Pressable>
               )}
             />
           </View>
         )}
 
-        {/* ── Step 2: Scan view ── */}
-        {step === "camera" && (
-          <View style={styles.scanContainer}>
-            {/* Top bar */}
+        {/* Step 2: Capture */}
+        {step === "capture" && (
+          <View style={styles.fullScreen}>
             <View style={styles.topBar}>
-              <Pressable style={styles.hudCloseBtn} onPress={onClose}>
-                <Ionicons name="close" size={22} color="#fff" />
+              <Pressable style={styles.hudBtn} onPress={() => { setStep("pick"); setSelected(null); }}>
+                <Ionicons name="chevron-back" size={22} color="#fff" />
               </Pressable>
-              {selectedEmployee && (
+              {selected && (
                 <View style={styles.empPill}>
                   <Ionicons name="person-circle-outline" size={16} color="#fff" />
-                  <Text style={styles.empPillText}>{selectedEmployee.name}</Text>
+                  <Text style={styles.empPillText}>{selected.name}</Text>
                 </View>
               )}
-              <Pressable style={styles.hudCloseBtn} onPress={() => { clearLockTimer(); setStep("pick"); setDetectionState("idle"); submittedRef.current = false; }}>
-                <Ionicons name="chevron-back" size={22} color="rgba(255,255,255,0.5)" />
+              <Pressable style={styles.hudBtn} onPress={onClose}>
+                <Ionicons name="close" size={22} color="#fff" />
               </Pressable>
             </View>
 
-            {/* Face frame */}
-            <View style={styles.frameArea}>
-              <Animated.View style={[styles.frameOuter, { borderColor: frameColor, transform: [{ scale: scaleAnim }] }]}>
-                <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-                  <View style={[styles.frameInner, { position: "relative" }]}>
-                    <CornerBracket position="tl" color={frameColor} />
-                    <CornerBracket position="tr" color={frameColor} />
-                    <CornerBracket position="bl" color={frameColor} />
-                    <CornerBracket position="br" color={frameColor} />
-                    <ScanAnimation state={detectionState} />
-                  </View>
-                </Animated.View>
-              </Animated.View>
-
-              {/* Guide rings */}
-              {detectionState === "idle" && (
-                <View style={styles.guideText}>
-                  <Text style={styles.guideLabel}>Center your face in the frame</Text>
-                </View>
-              )}
+            <View style={styles.captureArea}>
+              <View style={[styles.faceFrame, { borderColor: stepColor }]}>
+                <Ionicons name="person-circle-outline" size={100} color={stepColor} style={{ opacity: 0.5 }} />
+              </View>
+              <Text style={styles.captureHint}>
+                {Platform.OS === "web"
+                  ? "Select a clear face photo from your device"
+                  : "Position your face in the frame, then capture"}
+              </Text>
             </View>
 
-            {/* Bottom controls */}
-            <View style={styles.bottomControls}>
-              {/* Status pill */}
-              <View style={[styles.statusPill, { backgroundColor: "rgba(255,255,255,0.08)", borderColor: frameColor + "44", borderWidth: 1 }]}>
-                {detectionState === "processing" && <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />}
-                {detectionState === "success" && <Ionicons name="checkmark-circle" size={18} color="#16A34A" style={{ marginRight: 8 }} />}
-                {detectionState === "error" && <Ionicons name="alert-circle" size={18} color="#DC2626" style={{ marginRight: 8 }} />}
-                {(detectionState === "detecting" || detectionState === "locking") && <Ionicons name="scan-outline" size={18} color="#FBBF24" style={{ marginRight: 8 }} />}
-                {detectionState === "idle" && <Ionicons name="eye-outline" size={18} color="rgba(255,255,255,0.5)" style={{ marginRight: 8 }} />}
-                <Text style={styles.statusText}>{STATUS_LABELS[detectionState]}</Text>
+            <View style={styles.captureControls}>
+              <Pressable
+                style={[styles.captureBtn, { backgroundColor: "#576DFA" }]}
+                onPress={handleCapture}
+              >
+                <Ionicons
+                  name={Platform.OS === "web" ? "image-outline" : "camera"}
+                  size={22} color="#fff"
+                />
+                <Text style={styles.captureBtnText}>
+                  {Platform.OS === "web" ? "Choose Photo" : "Capture Photo"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {/* Step 3: Matching */}
+        {step === "matching" && (
+          <View style={styles.fullScreen}>
+            <View style={styles.centred}>
+              <Animated.View style={[styles.matchingCircle, { borderColor: "#FBBF24", transform: [{ scale: pulseAnim }] }]}>
+                <ActivityIndicator size="large" color="#FBBF24" />
+              </Animated.View>
+              <Text style={styles.matchingTitle}>Matching Face…</Text>
+              <Text style={styles.matchingDesc}>
+                Comparing biometric profile against enrolled face
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Step 4a: Success */}
+        {step === "success" && (
+          <View style={styles.fullScreen}>
+            <View style={styles.centred}>
+              <View style={[styles.resultCircle, { backgroundColor: "#16A34A22" }]}>
+                <Ionicons name="checkmark-circle" size={80} color="#16A34A" />
               </View>
+              <Text style={styles.resultTitle}>Identity Verified</Text>
+              <Text style={styles.resultName}>{selected?.name}</Text>
+              <View style={[styles.scorePill, { backgroundColor: "#DCFCE7" }]}>
+                <Ionicons name="analytics-outline" size={14} color="#16A34A" />
+                <Text style={[styles.scoreText, { color: "#16A34A" }]}>
+                  Match Score: {matchScore}%
+                </Text>
+              </View>
+              <Text style={styles.resultSub}>Attendance marked for today</Text>
+            </View>
+          </View>
+        )}
 
-              {/* Primary action: Detect Face */}
-              {detectionState === "idle" && (
-                <Pressable style={[styles.primaryBtn, { backgroundColor: "#576DFA" }]} onPress={handleDetectFace}>
-                  <Ionicons name="scan" size={20} color="#fff" />
-                  <Text style={styles.primaryBtnText}>Detect Face</Text>
+        {/* Step 4b: Failed */}
+        {step === "failed" && (
+          <View style={styles.fullScreen}>
+            <View style={styles.centred}>
+              <View style={[styles.resultCircle, { backgroundColor: "#FEF2F2" }]}>
+                <Ionicons name="close-circle" size={80} color="#DC2626" />
+              </View>
+              <Text style={styles.resultTitle}>Verification Failed</Text>
+              <View style={[styles.scorePill, { backgroundColor: "#FEE2E2" }]}>
+                <Ionicons name="analytics-outline" size={14} color="#DC2626" />
+                <Text style={[styles.scoreText, { color: "#DC2626" }]}>
+                  Match Score: {matchScore}%  (below threshold)
+                </Text>
+              </View>
+              <Text style={styles.resultSub}>The captured face does not match the enrolled profile.</Text>
+              <View style={styles.failActions}>
+                <Pressable style={[styles.failBtn, { backgroundColor: "#576DFA" }]} onPress={() => setStep("capture")}>
+                  <Ionicons name="refresh" size={16} color="#fff" />
+                  <Text style={styles.failBtnText}>Try Again</Text>
                 </Pressable>
-              )}
+                <Pressable style={styles.failBtnGhost} onPress={onClose}>
+                  <Text style={{ color: "rgba(255,255,255,0.5)", fontFamily: "Inter_400Regular", fontSize: 14 }}>Cancel</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        )}
 
-              {/* Retry on error */}
-              {detectionState === "error" && (
-                <Pressable style={[styles.primaryBtn, { backgroundColor: "#DC2626" }]} onPress={handleRetry}>
-                  <Ionicons name="refresh" size={18} color="#fff" />
-                  <Text style={styles.primaryBtnText}>Try Again</Text>
+        {/* Step 4c: Error */}
+        {step === "error" && (
+          <View style={styles.fullScreen}>
+            <View style={styles.centred}>
+              <View style={[styles.resultCircle, { backgroundColor: "#FEF2F2" }]}>
+                <Ionicons name="alert-circle" size={80} color="#DC2626" />
+              </View>
+              <Text style={styles.resultTitle}>Error</Text>
+              <Text style={styles.errorMsgText}>{errorMsg}</Text>
+              <View style={styles.failActions}>
+                <Pressable style={[styles.failBtn, { backgroundColor: "#576DFA" }]} onPress={() => setStep("capture")}>
+                  <Ionicons name="refresh" size={16} color="#fff" />
+                  <Text style={styles.failBtnText}>Retry</Text>
                 </Pressable>
-              )}
-
-              {/* Manual fallback */}
-              {detectionState === "idle" && (
-                <Pressable style={styles.manualBtn} onPress={triggerSubmit}>
-                  <Text style={styles.manualText}>Skip scan — Mark Present Directly</Text>
+                <Pressable style={styles.failBtnGhost} onPress={onClose}>
+                  <Text style={{ color: "rgba(255,255,255,0.5)", fontFamily: "Inter_400Regular", fontSize: 14 }}>Close</Text>
                 </Pressable>
-              )}
+              </View>
             </View>
           </View>
         )}
@@ -380,8 +356,8 @@ const styles = StyleSheet.create({
   },
   closeBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
   pickTitle: { fontSize: 20, fontFamily: "Inter_700Bold" },
-  pickIconRow: { alignItems: "center", paddingVertical: 20, gap: 10 },
-  scanIconBg: { width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center" },
+  pickIconRow: { alignItems: "center", paddingVertical: 16, gap: 8 },
+  scanIconBg: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center" },
   pickSubtitle: { fontSize: 14, fontFamily: "Inter_400Regular" },
   empList: { paddingHorizontal: 16, gap: 10, paddingBottom: 40 },
   empCard: {
@@ -392,13 +368,15 @@ const styles = StyleSheet.create({
   empAvatarText: { fontSize: 18, fontFamily: "Inter_700Bold" },
   empName: { fontSize: 15, fontFamily: "Inter_600SemiBold", marginBottom: 2 },
   empRole: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  enrolledDot: { marginRight: 2 },
+  unenrolledDot: { marginRight: 2 },
 
-  scanContainer: { flex: 1, alignItems: "center" },
+  fullScreen: { flex: 1, justifyContent: "space-between" },
   topBar: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    width: "100%", paddingHorizontal: 20, paddingTop: 56, paddingBottom: 16,
+    paddingHorizontal: 20, paddingTop: 56, paddingBottom: 16,
   },
-  hudCloseBtn: {
+  hudBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: "rgba(255,255,255,0.08)",
     alignItems: "center", justifyContent: "center",
@@ -410,40 +388,54 @@ const styles = StyleSheet.create({
   },
   empPillText: { color: "#fff", fontSize: 13, fontFamily: "Inter_600SemiBold" },
 
-  frameArea: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16 },
-  frameOuter: {
-    borderWidth: 1, borderRadius: 20,
-    padding: 6,
-  },
-  frameInner: {
-    width: FRAME_W, height: FRAME_H,
-    borderRadius: 16,
+  captureArea: { flex: 1, alignItems: "center", justifyContent: "center", gap: 24 },
+  faceFrame: {
+    width: 220, height: 260, borderRadius: 120, borderWidth: 2,
     alignItems: "center", justifyContent: "center",
-    overflow: "hidden",
     backgroundColor: "rgba(255,255,255,0.03)",
   },
-  guideText: { alignItems: "center" },
-  guideLabel: { color: "rgba(255,255,255,0.45)", fontSize: 13, fontFamily: "Inter_400Regular" },
-
-  bottomControls: {
-    width: "100%", paddingHorizontal: 24, paddingBottom: 52, gap: 12, alignItems: "center",
+  captureHint: {
+    color: "rgba(255,255,255,0.5)", fontSize: 14,
+    fontFamily: "Inter_400Regular", textAlign: "center",
+    maxWidth: 280, lineHeight: 20,
   },
-  statusPill: {
-    flexDirection: "row", alignItems: "center",
-    borderRadius: 24, paddingHorizontal: 18, paddingVertical: 12,
-    width: "100%",
+  captureControls: {
+    paddingHorizontal: 24, paddingBottom: 52, gap: 14,
   },
-  statusText: { color: "#fff", fontSize: 13, fontFamily: "Inter_500Medium", flex: 1 },
+  captureBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 10, borderRadius: 14, paddingVertical: 16,
+  },
+  captureBtnText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
 
-  primaryBtn: {
+  centred: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16, paddingHorizontal: 32 },
+  matchingCircle: {
+    width: 120, height: 120, borderRadius: 60, borderWidth: 2,
+    alignItems: "center", justifyContent: "center",
+  },
+  matchingTitle: { color: "#fff", fontSize: 22, fontFamily: "Inter_700Bold" },
+  matchingDesc: { color: "rgba(255,255,255,0.5)", fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center" },
+
+  resultCircle: { width: 120, height: 120, borderRadius: 60, alignItems: "center", justifyContent: "center" },
+  resultTitle: { color: "#fff", fontSize: 24, fontFamily: "Inter_700Bold" },
+  resultName: { color: "rgba(255,255,255,0.7)", fontSize: 17, fontFamily: "Inter_500Medium" },
+  scorePill: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+  },
+  scoreText: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  resultSub: { color: "rgba(255,255,255,0.4)", fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center" },
+
+  failActions: { gap: 12, marginTop: 8, width: "100%", alignItems: "center" },
+  failBtn: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    borderRadius: 14, paddingHorizontal: 24, paddingVertical: 14,
+    paddingHorizontal: 28, paddingVertical: 14, borderRadius: 14,
     width: "100%", justifyContent: "center",
   },
-  primaryBtnText: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
-
-  manualBtn: {
-    borderRadius: 12, paddingHorizontal: 20, paddingVertical: 10,
+  failBtnText: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
+  failBtnGhost: { paddingVertical: 10 },
+  errorMsgText: {
+    color: "rgba(255,255,255,0.5)", fontSize: 13, fontFamily: "Inter_400Regular",
+    textAlign: "center", lineHeight: 20, maxWidth: 280,
   },
-  manualText: { color: "rgba(255,255,255,0.4)", fontSize: 12, fontFamily: "Inter_400Regular" },
 });

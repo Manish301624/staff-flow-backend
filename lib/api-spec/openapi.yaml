@@ -26,6 +26,8 @@ tags:
     description: Dashboard summary data
   - name: leaves
     description: Leave management
+  - name: face
+    description: Face enrollment and biometric attendance verification
 paths:
   /healthz:
     get:
@@ -692,6 +694,54 @@ paths:
                 items:
                   $ref: "#/components/schemas/LeaveBalance"
 
+  /employees/{id}/enroll-face:
+    post:
+      operationId: enrollFace
+      tags: [face]
+      summary: Enroll a face photo for an employee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrollFaceBody"
+      responses:
+        "200":
+          description: Face enrolled successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollFaceResponse"
+        "422":
+          description: No face detected in image
+
+  /verify-attendance:
+    post:
+      operationId: verifyAttendance
+      tags: [face]
+      summary: Verify face and log attendance if matched
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyAttendanceBody"
+      responses:
+        "200":
+          description: Verification result (matched or not)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifyAttendanceResponse"
+        "422":
+          description: No face detected or employee not enrolled
+
 components:
   schemas:
     HealthStatus:
@@ -1351,3 +1401,61 @@ components:
         - sickRemaining
         - earnedRemaining
 
+
+    EnrollFaceBody:
+      type: object
+      properties:
+        imageBase64:
+          type: string
+          description: Base64-encoded JPEG image (data URL or raw base64)
+      required:
+        - imageBase64
+
+    EnrollFaceResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        employeeId:
+          type: integer
+        facePhotoUrl:
+          type: string
+      required:
+        - success
+        - employeeId
+        - facePhotoUrl
+
+    VerifyAttendanceBody:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        imageBase64:
+          type: string
+        date:
+          type: string
+        checkIn:
+          type: string
+      required:
+        - employeeId
+        - imageBase64
+
+    VerifyAttendanceResponse:
+      type: object
+      properties:
+        matched:
+          type: boolean
+        matchScore:
+          type: integer
+        distance:
+          type: number
+        attendanceId:
+          type: integer
+        employeeName:
+          type: string
+        error:
+          type: string
+      required:
+        - matched
+        - matchScore
+        - distance

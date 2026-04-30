@@ -28,6 +28,8 @@ import type {
   CreateTaskBody,
   DashboardStats,
   Employee,
+  EnrollFaceBody,
+  EnrollFaceResponse,
   GetAttendanceSummaryParams,
   GetLeaveBalancesParams,
   GetMonthlyReportParams,
@@ -54,6 +56,8 @@ import type {
   UpdatePaymentBody,
   UpdateTaskBody,
   User,
+  VerifyAttendanceBody,
+  VerifyAttendanceResponse,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -2835,3 +2839,176 @@ export function useGetLeaveBalances<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Enroll a face photo for an employee
+ */
+export const getEnrollFaceUrl = (id: number) => {
+  return `/api/employees/${id}/enroll-face`;
+};
+
+export const enrollFace = async (
+  id: number,
+  enrollFaceBody: EnrollFaceBody,
+  options?: RequestInit,
+): Promise<EnrollFaceResponse> => {
+  return customFetch<EnrollFaceResponse>(getEnrollFaceUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(enrollFaceBody),
+  });
+};
+
+export const getEnrollFaceMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof enrollFace>>,
+    TError,
+    { id: number; data: BodyType<EnrollFaceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof enrollFace>>,
+  TError,
+  { id: number; data: BodyType<EnrollFaceBody> },
+  TContext
+> => {
+  const mutationKey = ["enrollFace"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof enrollFace>>,
+    { id: number; data: BodyType<EnrollFaceBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return enrollFace(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EnrollFaceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof enrollFace>>
+>;
+export type EnrollFaceMutationBody = BodyType<EnrollFaceBody>;
+export type EnrollFaceMutationError = ErrorType<void>;
+
+/**
+ * @summary Enroll a face photo for an employee
+ */
+export const useEnrollFace = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof enrollFace>>,
+    TError,
+    { id: number; data: BodyType<EnrollFaceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof enrollFace>>,
+  TError,
+  { id: number; data: BodyType<EnrollFaceBody> },
+  TContext
+> => {
+  return useMutation(getEnrollFaceMutationOptions(options));
+};
+
+/**
+ * @summary Verify face and log attendance if matched
+ */
+export const getVerifyAttendanceUrl = () => {
+  return `/api/verify-attendance`;
+};
+
+export const verifyAttendance = async (
+  verifyAttendanceBody: VerifyAttendanceBody,
+  options?: RequestInit,
+): Promise<VerifyAttendanceResponse> => {
+  return customFetch<VerifyAttendanceResponse>(getVerifyAttendanceUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(verifyAttendanceBody),
+  });
+};
+
+export const getVerifyAttendanceMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof verifyAttendance>>,
+    TError,
+    { data: BodyType<VerifyAttendanceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof verifyAttendance>>,
+  TError,
+  { data: BodyType<VerifyAttendanceBody> },
+  TContext
+> => {
+  const mutationKey = ["verifyAttendance"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof verifyAttendance>>,
+    { data: BodyType<VerifyAttendanceBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return verifyAttendance(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type VerifyAttendanceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof verifyAttendance>>
+>;
+export type VerifyAttendanceMutationBody = BodyType<VerifyAttendanceBody>;
+export type VerifyAttendanceMutationError = ErrorType<void>;
+
+/**
+ * @summary Verify face and log attendance if matched
+ */
+export const useVerifyAttendance = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof verifyAttendance>>,
+    TError,
+    { data: BodyType<VerifyAttendanceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof verifyAttendance>>,
+  TError,
+  { data: BodyType<VerifyAttendanceBody> },
+  TContext
+> => {
+  return useMutation(getVerifyAttendanceMutationOptions(options));
+};

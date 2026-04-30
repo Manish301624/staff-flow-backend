@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { initFaceService } from "./lib/faceService";
 
 const rawPort = process.env["PORT"];
 
@@ -20,6 +21,9 @@ app.listen(port, (err) => {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
   }
-
   logger.info({ port }, "Server listening");
+});
+
+initFaceService().catch((err) => {
+  logger.warn({ err }, "Face service initialization failed — face features unavailable");
 });

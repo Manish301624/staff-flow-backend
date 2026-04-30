@@ -13,6 +13,14 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, "node_modules"),
 ];
 
+// Block Metro from watching transient Replit system directories that can
+// disappear mid-watch and cause ENOENT crashes.
+config.resolver.blockList = [
+  /\/\.local\/.*/,
+  /\/\.replit\/.*/,
+  /\/\.git\/.*/,
+];
+
 const singletons = [
   "@tanstack/react-query",
   "@tanstack/query-core",

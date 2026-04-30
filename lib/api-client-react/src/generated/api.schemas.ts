@@ -327,6 +327,33 @@ export interface LeaveBalance {
   earnedRemaining: number;
 }
 
+export interface EnrollFaceBody {
+  /** Base64-encoded JPEG image (data URL or raw base64) */
+  imageBase64: string;
+}
+
+export interface EnrollFaceResponse {
+  success: boolean;
+  employeeId: number;
+  facePhotoUrl: string;
+}
+
+export interface VerifyAttendanceBody {
+  employeeId: number;
+  imageBase64: string;
+  date?: string;
+  checkIn?: string;
+}
+
+export interface VerifyAttendanceResponse {
+  matched: boolean;
+  matchScore: number;
+  distance: number;
+  attendanceId?: number;
+  employeeName?: string;
+  error?: string;
+}
+
 export type ListEmployeesParams = {
   search?: string;
   role?: string;

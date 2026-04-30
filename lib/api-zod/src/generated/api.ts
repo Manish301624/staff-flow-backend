@@ -631,3 +631,41 @@ export const GetLeaveBalancesResponseItem = zod.object({
   earnedRemaining: zod.number(),
 });
 export const GetLeaveBalancesResponse = zod.array(GetLeaveBalancesResponseItem);
+
+/**
+ * @summary Enroll a face photo for an employee
+ */
+export const EnrollFaceParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const EnrollFaceBody = zod.object({
+  imageBase64: zod
+    .string()
+    .describe("Base64-encoded JPEG image (data URL or raw base64)"),
+});
+
+export const EnrollFaceResponse = zod.object({
+  success: zod.boolean(),
+  employeeId: zod.number(),
+  facePhotoUrl: zod.string(),
+});
+
+/**
+ * @summary Verify face and log attendance if matched
+ */
+export const VerifyAttendanceBody = zod.object({
+  employeeId: zod.number(),
+  imageBase64: zod.string(),
+  date: zod.string().optional(),
+  checkIn: zod.string().optional(),
+});
+
+export const VerifyAttendanceResponse = zod.object({
+  matched: zod.boolean(),
+  matchScore: zod.number(),
+  distance: zod.number(),
+  attendanceId: zod.number().optional(),
+  employeeName: zod.string().optional(),
+  error: zod.string().optional(),
+});
