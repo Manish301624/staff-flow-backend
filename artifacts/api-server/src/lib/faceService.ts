@@ -23,10 +23,21 @@ export async function initFaceService(): Promise<void> {
   initPromise = (async () => {
     logger.info("Initializing face service...");
 
-    [faceapi, canvasModule] = await Promise.all([
-      import("@vladmandic/face-api"),
+    // Use the node-wasm build — runs WASM TF backend in Node.js,
+    // avoiding @tensorflow/tfjs-node@4.22 incompatibilities.
+    const [faceApiModule, canvas] = await Promise.all([
+      import("@vladmandic/face-api/dist/face-api.node-wasm.js"),
       import("canvas"),
     ]);
+
+    faceapi = faceApiModule;
+    canvasModule = canvas;
+
+    // WASM backend must be fully initialized before any tensor ops.
+    // face-api exposes the underlying tf instance it uses.
+    if (typeof faceapi.tf?.ready === "function") {
+      await faceapi.tf.ready();
+    }
 
     const { Canvas, Image, ImageData } = canvasModule;
 

@@ -30,6 +30,7 @@ async function buildAll() {
     external: [
       "*.node",
       "@vladmandic/face-api",
+      "@vladmandic/face-api/*",
       "@vladmandic/tfjs",
       "@vladmandic/tfjs-backend-cpu",
       "@vladmandic/tfjs-backend-webgl",
