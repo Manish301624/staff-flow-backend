@@ -219,6 +219,21 @@ export const MarkAttendanceResponseItem = zod.object({
 export const MarkAttendanceResponse = zod.array(MarkAttendanceResponseItem);
 
 /**
+ * @summary Get today's check-in/out status for an employee
+ */
+export const GetTodayStatusQueryParams = zod.object({
+  employeeId: zod.coerce.number(),
+});
+
+export const GetTodayStatusResponse = zod.object({
+  hasRecord: zod.boolean(),
+  status: zod.string().nullish(),
+  checkIn: zod.string().nullish(),
+  checkOut: zod.string().nullish(),
+  expectedAction: zod.string().describe("check_in or check_out"),
+});
+
+/**
  * @summary Update attendance record
  */
 export const UpdateAttendanceParams = zod.object({
@@ -657,8 +672,8 @@ export const EnrollFaceResponse = zod.object({
 export const VerifyAttendanceBody = zod.object({
   employeeId: zod.number(),
   imageBase64: zod.string(),
-  date: zod.string().optional(),
-  checkIn: zod.string().optional(),
+  latitude: zod.number().optional(),
+  longitude: zod.number().optional(),
 });
 
 export const VerifyAttendanceResponse = zod.object({
@@ -667,5 +682,12 @@ export const VerifyAttendanceResponse = zod.object({
   distance: zod.number(),
   attendanceId: zod.number().optional(),
   employeeName: zod.string().optional(),
+  action: zod
+    .string()
+    .optional()
+    .describe("check_in, check_out, or already_checked_out"),
+  checkIn: zod.string().nullish(),
+  checkOut: zod.string().nullish(),
+  hoursWorked: zod.number().nullish(),
   error: zod.string().optional(),
 });

@@ -30,12 +30,26 @@ function serviceCheck(res: any): boolean {
   return true;
 }
 
+/** Parse "HH:MM" → total minutes since midnight */
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+
+/** Calculate hours worked between two "HH:MM" strings (rounded to 2dp) */
+function calcHoursWorked(checkIn: string, checkOut: string): number {
+  const diffMins = timeToMinutes(checkOut) - timeToMinutes(checkIn);
+  return Math.round((diffMins / 60) * 100) / 100;
+}
+
+// ─── Enroll face ────────────────────────────────────────────────────────────
+
 router.post(
   "/employees/:id/enroll-face",
   requireAuth,
   async (req, res): Promise<void> => {
     const { adminId } = (req as any).user;
-    const employeeId = parseInt(req.params.id, 10);
+    const employeeId = parseInt(req.params.id as string, 10);
     const { imageBase64 } = req.body as { imageBase64: string };
 
     if (!imageBase64) {
@@ -80,16 +94,15 @@ router.post(
 
     await db
       .update(employeesTable)
-      .set({
-        faceDescriptor: Array.from(descriptor),
-        facePhotoUrl,
-      })
+      .set({ faceDescriptor: Array.from(descriptor), facePhotoUrl })
       .where(eq(employeesTable.id, employeeId));
 
     req.log.info({ employeeId, facePhotoUrl }, "Face enrolled successfully");
     res.json({ success: true, employeeId, facePhotoUrl });
   },
 );
+
+// ─── Verify attendance (smart check-in / check-out) ─────────────────────────
 
 router.post(
   "/verify-attendance",
@@ -99,13 +112,13 @@ router.post(
     const {
       employeeId,
       imageBase64,
-      date,
-      checkIn,
+      latitude,
+      longitude,
     } = req.body as {
       employeeId: number;
       imageBase64: string;
-      date?: string;
-      checkIn?: string;
+      latitude?: number;
+      longitude?: number;
     };
 
     if (!employeeId || !imageBase64) {
@@ -172,68 +185,100 @@ router.post(
       return;
     }
 
-    const attendanceDate = date ?? new Date().toISOString().slice(0, 10);
-    const attendanceCheckIn =
-      checkIn ??
-      new Date().toLocaleTimeString("en-GB", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+    // ── Smart check-in / check-out logic ──────────────────────────────────
+    const today = new Date().toISOString().slice(0, 10);
+    const nowTime = new Date().toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }) as string;
 
-    // Upsert: if an "absent" record exists for today, update it to "present".
-    // If a "present" record already exists, leave it (idempotent).
-    // Otherwise insert a new "present" record.
     const existingRecords = await db
       .select()
       .from(attendanceTable)
       .where(
         and(
           eq(attendanceTable.employeeId, employeeId),
-          eq(attendanceTable.date, attendanceDate),
+          eq(attendanceTable.date, today),
         ),
       );
 
-    const absentRecord = existingRecords.find((r) => r.status === "absent");
+    // Find the most relevant record
     const presentRecord = existingRecords.find((r) => r.status === "present");
+    const absentRecord  = existingRecords.find((r) => r.status === "absent");
 
+    let action: string;
     let attendanceId: number;
+    let checkIn: string | null = null;
+    let checkOut: string | null = null;
+    let hoursWorked: number | null = null;
 
-    if (presentRecord) {
-      // Already marked present today — idempotent success
+    if (presentRecord && presentRecord.checkOut) {
+      // Already fully checked out — idempotent
+      action = "already_checked_out";
       attendanceId = presentRecord.id;
-      req.log.info(
-        { employeeId, attendanceId },
-        "Database Update Status: Already present — no change needed",
-      );
-    } else if (absentRecord) {
-      // Upgrade existing absent record to present
+      checkIn = presentRecord.checkIn;
+      checkOut = presentRecord.checkOut;
+      if (checkIn && checkOut) {
+        hoursWorked = calcHoursWorked(checkIn, checkOut);
+      }
+      req.log.info({ employeeId, attendanceId }, "Already checked out — no change");
+
+    } else if (presentRecord && !presentRecord.checkOut) {
+      // Checked in but not yet out → CHECK-OUT
+      action = "check_out";
+      checkIn = presentRecord.checkIn;
+      checkOut = nowTime;
+      hoursWorked = checkIn ? calcHoursWorked(checkIn, checkOut) : null;
+
       const [updated] = await db
         .update(attendanceTable)
-        .set({ status: "present", checkIn: attendanceCheckIn })
-        .where(eq(attendanceTable.id, absentRecord.id))
+        .set({
+          checkOut,
+          latitude: latitude ?? presentRecord.latitude,
+          longitude: longitude ?? presentRecord.longitude,
+        })
+        .where(eq(attendanceTable.id, presentRecord.id))
         .returning();
+
       attendanceId = updated.id;
       req.log.info(
-        { employeeId, attendanceId },
-        "Database Update Status: Success — absent → present",
+        { employeeId, attendanceId, checkIn, checkOut, hoursWorked },
+        "Check-out recorded",
       );
+
+    } else if (absentRecord) {
+      // Absent record exists → upgrade to present (CHECK-IN)
+      action = "check_in";
+      checkIn = nowTime;
+
+      const [updated] = await db
+        .update(attendanceTable)
+        .set({ status: "present", checkIn, latitude, longitude })
+        .where(eq(attendanceTable.id, absentRecord.id))
+        .returning();
+
+      attendanceId = updated.id;
+      req.log.info({ employeeId, attendanceId, checkIn }, "Check-in recorded (absent → present)");
+
     } else {
-      // No record exists — insert new present record
+      // No record → fresh CHECK-IN
+      action = "check_in";
+      checkIn = nowTime;
+
       const [record] = await db
         .insert(attendanceTable)
         .values({
-          adminId,
           employeeId,
-          date: attendanceDate,
+          date: today,
           status: "present",
-          checkIn: attendanceCheckIn,
+          checkIn,
+          latitude,
+          longitude,
         })
         .returning();
+
       attendanceId = record.id;
-      req.log.info(
-        { employeeId, attendanceId },
-        "Database Update Status: Success — new present record inserted",
-      );
+      req.log.info({ employeeId, attendanceId, checkIn }, "Check-in recorded (new record)");
     }
 
     res.json({
@@ -242,6 +287,10 @@ router.post(
       distance,
       attendanceId,
       employeeName: employee.name,
+      action,
+      checkIn,
+      checkOut,
+      hoursWorked,
     });
   },
 );

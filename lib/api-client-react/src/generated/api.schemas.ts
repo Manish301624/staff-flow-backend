@@ -341,8 +341,8 @@ export interface EnrollFaceResponse {
 export interface VerifyAttendanceBody {
   employeeId: number;
   imageBase64: string;
-  date?: string;
-  checkIn?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface VerifyAttendanceResponse {
@@ -351,7 +351,27 @@ export interface VerifyAttendanceResponse {
   distance: number;
   attendanceId?: number;
   employeeName?: string;
+  /** check_in, check_out, or already_checked_out */
+  action?: string;
+  /** @nullable */
+  checkIn?: string | null;
+  /** @nullable */
+  checkOut?: string | null;
+  /** @nullable */
+  hoursWorked?: number | null;
   error?: string;
+}
+
+export interface TodayStatusResponse {
+  hasRecord: boolean;
+  /** @nullable */
+  status?: string | null;
+  /** @nullable */
+  checkIn?: string | null;
+  /** @nullable */
+  checkOut?: string | null;
+  /** check_in or check_out */
+  expectedAction: string;
 }
 
 export type ListEmployeesParams = {
@@ -364,6 +384,10 @@ export type ListAttendanceParams = {
   month?: number;
   year?: number;
   date?: string;
+};
+
+export type GetTodayStatusParams = {
+  employeeId: number;
 };
 
 export type GetAttendanceSummaryParams = {

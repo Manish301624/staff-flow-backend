@@ -246,6 +246,25 @@ paths:
                 items:
                   $ref: "#/components/schemas/Attendance"
 
+  /attendance/today-status:
+    get:
+      operationId: getTodayStatus
+      tags: [attendance]
+      summary: Get today's check-in/out status for an employee
+      parameters:
+        - name: employeeId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Today's attendance status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodayStatusResponse"
+
   /attendance/{id}:
     patch:
       operationId: updateAttendance
@@ -1432,10 +1451,10 @@ components:
           type: integer
         imageBase64:
           type: string
-        date:
-          type: string
-        checkIn:
-          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
       required:
         - employeeId
         - imageBase64
@@ -1453,9 +1472,36 @@ components:
           type: integer
         employeeName:
           type: string
+        action:
+          type: string
+          description: check_in, check_out, or already_checked_out
+        checkIn:
+          type: ["string", "null"]
+        checkOut:
+          type: ["string", "null"]
+        hoursWorked:
+          type: ["number", "null"]
         error:
           type: string
       required:
         - matched
         - matchScore
         - distance
+
+    TodayStatusResponse:
+      type: object
+      properties:
+        hasRecord:
+          type: boolean
+        status:
+          type: ["string", "null"]
+        checkIn:
+          type: ["string", "null"]
+        checkOut:
+          type: ["string", "null"]
+        expectedAction:
+          type: string
+          description: check_in or check_out
+      required:
+        - hasRecord
+        - expectedAction

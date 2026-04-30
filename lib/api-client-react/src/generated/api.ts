@@ -34,6 +34,7 @@ import type {
   GetLeaveBalancesParams,
   GetMonthlyReportParams,
   GetSalarySummaryParams,
+  GetTodayStatusParams,
   HealthStatus,
   Insight,
   Leave,
@@ -51,6 +52,7 @@ import type {
   RejectLeaveBody,
   SalarySummary,
   Task,
+  TodayStatusResponse,
   UpdateAttendanceBody,
   UpdateEmployeeBody,
   UpdatePaymentBody,
@@ -996,6 +998,100 @@ export const useMarkAttendance = <
 > => {
   return useMutation(getMarkAttendanceMutationOptions(options));
 };
+
+/**
+ * @summary Get today's check-in/out status for an employee
+ */
+export const getGetTodayStatusUrl = (params: GetTodayStatusParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/attendance/today-status?${stringifiedParams}`
+    : `/api/attendance/today-status`;
+};
+
+export const getTodayStatus = async (
+  params: GetTodayStatusParams,
+  options?: RequestInit,
+): Promise<TodayStatusResponse> => {
+  return customFetch<TodayStatusResponse>(getGetTodayStatusUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTodayStatusQueryKey = (params?: GetTodayStatusParams) => {
+  return [`/api/attendance/today-status`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetTodayStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTodayStatus>>,
+  TError = ErrorType<unknown>,
+>(
+  params: GetTodayStatusParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTodayStatus>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTodayStatusQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTodayStatus>>> = ({
+    signal,
+  }) => getTodayStatus(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTodayStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTodayStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTodayStatus>>
+>;
+export type GetTodayStatusQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get today's check-in/out status for an employee
+ */
+
+export function useGetTodayStatus<
+  TData = Awaited<ReturnType<typeof getTodayStatus>>,
+  TError = ErrorType<unknown>,
+>(
+  params: GetTodayStatusParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTodayStatus>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTodayStatusQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Update attendance record

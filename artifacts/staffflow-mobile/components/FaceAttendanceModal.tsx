@@ -18,10 +18,11 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Location from "expo-location";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
-import { useVerifyAttendance } from "@workspace/api-client-react";
+import { useVerifyAttendance, getTodayStatus } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 const COUNTDOWN_MS = 3000;
@@ -33,6 +34,13 @@ type VerifyStep =
   | "success"
   | "failed"
   | "error";
+
+type TodayStatus = {
+  hasRecord: boolean;
+  checkIn: string | null;
+  checkOut: string | null;
+  expectedAction: string;
+};
 
 interface Employee {
   id: number;
@@ -54,13 +62,24 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
   const queryClient = useQueryClient();
 
   const [step, setStep] = useState<VerifyStep>("pick");
-  // Use a ref so timer callbacks always see the latest employee without stale-closure issues
   const selectedRef = useRef<Employee | null>(null);
   const [selectedDisplay, setSelectedDisplay] = useState<Employee | null>(null);
 
   const [matchScore, setMatchScore] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [secondsLeft, setSecondsLeft] = useState(3);
+
+  // Today's status for the selected employee (shown on camera screen)
+  const [todayStatus, setTodayStatus] = useState<TodayStatus | null>(null);
+  const [statusLoading, setStatusLoading] = useState(false);
+
+  // Result from verify (for success screen)
+  const [verifyResult, setVerifyResult] = useState<{
+    action: string;
+    checkIn: string | null;
+    checkOut: string | null;
+    hoursWorked: number | null;
+  } | null>(null);
 
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
@@ -96,6 +115,8 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
       setMatchScore(0);
       setErrorMsg("");
       setSecondsLeft(3);
+      setTodayStatus(null);
+      setVerifyResult(null);
       capturedRef.current = false;
       progressAnim.setValue(0);
     }
@@ -116,35 +137,91 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
     pulseAnim.setValue(1);
   }, [step]);
 
-  // Employee is passed directly — never read from state in timer callbacks
-  const submitVerification = useCallback(async (emp: Employee, imageBase64: string) => {
+  /** Fetch today's attendance status for the selected employee */
+  const fetchTodayStatus = useCallback(async (emp: Employee) => {
+    setStatusLoading(true);
+    try {
+      const data = await getTodayStatus({ employeeId: emp.id });
+      setTodayStatus({
+        hasRecord: data.hasRecord,
+        checkIn: data.checkIn ?? null,
+        checkOut: data.checkOut ?? null,
+        expectedAction: data.expectedAction,
+      });
+    } catch {
+      setTodayStatus(null);
+    } finally {
+      setStatusLoading(false);
+    }
+  }, []);
+
+  /** Try to get GPS coordinates (non-blocking, fails gracefully) */
+  const getLocation = useCallback(async (): Promise<{ latitude: number; longitude: number } | null> => {
+    if (Platform.OS === "web") return null;
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return null;
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      return { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+    } catch {
+      return null;
+    }
+  }, []);
+
+  /** Convert file URI → base64 data-URL via expo-file-system */
+  const uriToBase64 = useCallback(async (uri: string): Promise<string | null> => {
+    try {
+      const b64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: "base64" as FileSystem.EncodingType,
+      });
+      return b64 ? `data:image/jpeg;base64,${b64}` : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Employee is always passed directly — never read from stale state closure
+  const submitVerification = useCallback(async (emp: Employee, imageBase64: string, coords: { latitude: number; longitude: number } | null) => {
     clearAllTimers();
     setStep("verifying");
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    const today = new Date().toISOString().slice(0, 10);
-    const checkIn = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-
-    console.log("[FaceAttendance] Sending to backend — employeeId:", emp.id, "imageLen:", imageBase64.length);
+    console.log("[FaceAttendance] Sending to backend — employeeId:", emp.id);
 
     try {
       const result = await verifyAttendance({
-        data: { employeeId: emp.id, imageBase64, date: today, checkIn },
+        data: {
+          employeeId: emp.id,
+          imageBase64,
+          ...(coords ?? {}),
+        },
       });
 
-      console.log("[FaceAttendance] Match Score:", result.matchScore, "| Matched:", result.matched);
+      console.log("[FaceAttendance] Match Score:", result.matchScore, "| Action:", result.action);
       setMatchScore(result.matchScore);
+      setVerifyResult({
+        action: result.action ?? "check_in",
+        checkIn: result.checkIn ?? null,
+        checkOut: result.checkOut ?? null,
+        hoursWorked: result.hoursWorked ?? null,
+      });
 
       if (result.matched) {
         setStep("success");
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        // Query keys match what the generated hooks use (URL-path based)
+        // Distinct haptics for check-in vs check-out
+        if (result.action === "check_out" || result.action === "already_checked_out") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        } else {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+        // Invalidate all relevant caches
         await queryClient.invalidateQueries({ queryKey: ["/api/attendance"] });
         await queryClient.invalidateQueries({ queryKey: ["/api/attendance/summary"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/attendance/today-status"] });
         await queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
         await queryClient.invalidateQueries({ queryKey: ["/api/dashboard/insights"] });
         await queryClient.invalidateQueries({ queryKey: ["/api/dashboard/attendance-trend"] });
-        setTimeout(() => onSuccess(), 2000);
+        setTimeout(() => onSuccess(), 3000);
       } else {
         setStep("failed");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -161,19 +238,6 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
     }
   }, [verifyAttendance, queryClient, onSuccess, clearAllTimers]);
 
-  const uriToBase64 = useCallback(async (uri: string): Promise<string | null> => {
-    try {
-      const b64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      return b64 ? `data:image/jpeg;base64,${b64}` : null;
-    } catch (e) {
-      console.log("[FaceAttendance] FileSystem fallback failed:", e);
-      return null;
-    }
-  }, []);
-
-  // emp is passed directly — no stale closure on selectedRef
   const startCountdown = useCallback((emp: Employee) => {
     capturedRef.current = false;
     setSecondsLeft(3);
@@ -186,17 +250,12 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
       easing: Easing.linear,
     }).start();
 
-    // Tick display
     safeTimeout(() => setSecondsLeft(2), 1000);
     safeTimeout(() => setSecondsLeft(1), 2000);
     safeTimeout(() => setSecondsLeft(0), 3000);
 
-    // Actual capture
     safeTimeout(async () => {
-      if (capturedRef.current) {
-        console.log("[FaceAttendance] Skipping duplicate capture");
-        return;
-      }
+      if (capturedRef.current) return;
       if (!cameraRef.current) {
         setErrorMsg("Camera not ready. Please try again.");
         setStep("error");
@@ -207,8 +266,11 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
       console.log("[FaceAttendance] Auto-capture triggered for emp:", emp.id);
 
       try {
-        const pic = await cameraRef.current.takePictureAsync({ quality: 0.7, base64: true });
-        console.log("[FaceAttendance] Picture taken — uri:", pic?.uri, "has base64:", !!pic?.base64);
+        // Capture photo and GPS in parallel
+        const [pic, coords] = await Promise.all([
+          cameraRef.current.takePictureAsync({ quality: 0.7, base64: true }),
+          getLocation(),
+        ]);
 
         if (!pic?.uri) throw new Error("Camera returned no picture");
 
@@ -218,19 +280,21 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
 
         if (!imageBase64) throw new Error("Could not read image data from camera");
 
-        await submitVerification(emp, imageBase64);
+        await submitVerification(emp, imageBase64, coords);
       } catch (e: any) {
         console.log("[FaceAttendance] Capture error:", e?.message ?? e);
         setErrorMsg(e?.message ?? "Could not capture photo. Please try again.");
         setStep("error");
       }
     }, COUNTDOWN_MS);
-  }, [progressAnim, safeTimeout, submitVerification, uriToBase64]);
+  }, [progressAnim, safeTimeout, submitVerification, getLocation, uriToBase64]);
 
   const openCamera = useCallback(async (emp: Employee) => {
-    // Store in ref immediately so retryCamera can access it
     selectedRef.current = emp;
     setSelectedDisplay(emp);
+
+    // Fetch today's status immediately (shown on camera screen)
+    fetchTodayStatus(emp);
 
     if (Platform.OS === "web") {
       const { default: ImagePicker } = await import("expo-image-picker");
@@ -244,7 +308,7 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
         const imageBase64: string | null = asset.base64
           ? `data:image/jpeg;base64,${asset.base64}`
           : asset.uri ? await uriToBase64(asset.uri) : null;
-        if (imageBase64) await submitVerification(emp, imageBase64);
+        if (imageBase64) await submitVerification(emp, imageBase64, null);
       }
       return;
     }
@@ -259,9 +323,8 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
     }
 
     setStep("camera");
-    // Pass emp directly into startCountdown — avoids stale closure
     safeTimeout(() => startCountdown(emp), 900);
-  }, [permission, requestPermission, submitVerification, startCountdown, safeTimeout, uriToBase64]);
+  }, [permission, requestPermission, submitVerification, startCountdown, safeTimeout, uriToBase64, fetchTodayStatus]);
 
   const retryCamera = useCallback(() => {
     clearAllTimers();
@@ -269,8 +332,56 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
     const emp = selectedRef.current;
     if (!emp) { setStep("pick"); return; }
     setStep("camera");
+    // Re-fetch status in case it changed
+    fetchTodayStatus(emp);
     safeTimeout(() => startCountdown(emp), 900);
-  }, [startCountdown, safeTimeout, clearAllTimers]);
+  }, [startCountdown, safeTimeout, clearAllTimers, fetchTodayStatus]);
+
+  // ── Helpers for status indicator ────────────────────────────────────────────
+
+  const statusLabel = (): string => {
+    if (statusLoading) return "Checking status…";
+    if (!todayStatus?.hasRecord) return "Not clocked in today";
+    if (todayStatus.checkOut) return `Clocked out at ${todayStatus.checkOut}`;
+    return `Working since ${todayStatus.checkIn ?? "—"}`;
+  };
+
+  const statusColor = (): string => {
+    if (!todayStatus?.hasRecord) return "#94A3B8";
+    if (todayStatus.checkOut) return "#FBBF24";
+    return "#16A34A";
+  };
+
+  const actionLabel = (): string => {
+    if (!todayStatus?.hasRecord) return "Check-In";
+    if (todayStatus.checkOut) return "Already Checked Out";
+    return "Check-Out";
+  };
+
+  // ── Success message helpers ──────────────────────────────────────────────────
+
+  const successTitle = (): string => {
+    if (verifyResult?.action === "check_out") return "Successfully Checked Out!";
+    if (verifyResult?.action === "already_checked_out") return "Already Checked Out";
+    return "Successfully Checked In!";
+  };
+
+  const successMessage = (): string => {
+    if (verifyResult?.action === "check_out") return "Have a great evening! 🌙";
+    if (verifyResult?.action === "already_checked_out") return "You were already checked out today.";
+    return "Have a productive day! 🌟";
+  };
+
+  const successIconName = (): "checkmark-circle" | "exit" | "information-circle" => {
+    if (verifyResult?.action === "check_out" || verifyResult?.action === "already_checked_out") return "exit";
+    return "checkmark-circle";
+  };
+
+  const successIconColor = (): string => {
+    if (verifyResult?.action === "check_out") return "#FBBF24";
+    if (verifyResult?.action === "already_checked_out") return "#94A3B8";
+    return "#16A34A";
+  };
 
   const RING_SIZE = 240;
   const RING_BORDER = 4;
@@ -280,7 +391,6 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
     outputRange: ["#576DFA", "#FBBF24", "#16A34A"],
   });
 
-  // Use selectedDisplay for rendering (updated via setSelectedDisplay)
   const selected = selectedDisplay;
 
   return (
@@ -298,11 +408,11 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
               <View style={{ width: 40 }} />
             </View>
             <View style={styles.pickIconRow}>
-              <View style={[styles.scanIconBg, { backgroundColor: "#16A34A18" }]}>
-                <Ionicons name="scan" size={40} color="#16A34A" />
+              <View style={[styles.scanIconBg, { backgroundColor: "#576DFA18" }]}>
+                <Ionicons name="scan" size={40} color="#576DFA" />
               </View>
               <Text style={[styles.pickSubtitle, { color: colors.mutedForeground }]}>
-                Select an employee to verify
+                Select an employee to clock in or out
               </Text>
             </View>
             <FlatList
@@ -336,11 +446,12 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
           </View>
         )}
 
-        {/* ── Step 2: Live camera with countdown ── */}
+        {/* ── Step 2: Camera with status indicator + countdown ── */}
         {step === "camera" && (
           <View style={styles.fullScreen}>
+            {/* Top bar */}
             <View style={styles.topBar}>
-              <Pressable style={styles.hudBtn} onPress={() => { clearAllTimers(); setStep("pick"); selectedRef.current = null; setSelectedDisplay(null); }}>
+              <Pressable style={styles.hudBtn} onPress={() => { clearAllTimers(); setStep("pick"); selectedRef.current = null; setSelectedDisplay(null); setTodayStatus(null); }}>
                 <Ionicons name="chevron-back" size={22} color="#fff" />
               </Pressable>
               {selected && (
@@ -354,8 +465,20 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
               </Pressable>
             </View>
 
+            {/* Status indicator */}
+            <View style={styles.statusBar}>
+              <View style={[styles.statusDot, { backgroundColor: statusColor() }]} />
+              <Text style={styles.statusText}>{statusLabel()}</Text>
+              {!statusLoading && (
+                <View style={[styles.actionBadge, { backgroundColor: todayStatus?.checkOut ? "#78350F" : todayStatus?.hasRecord ? "#14532D" : "#1E3A5F" }]}>
+                  <Text style={styles.actionBadgeText}>{actionLabel()}</Text>
+                </View>
+              )}
+            </View>
+
             <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="front" />
 
+            {/* Animated oval guide */}
             <View style={styles.ovalWrapper}>
               <View style={{ width: RING_SIZE, height: RING_SIZE + 40, position: "relative", alignItems: "center", justifyContent: "center" }}>
                 <View style={[styles.ovalBg, { width: RING_SIZE, height: RING_SIZE + 40, borderRadius: RING_SIZE / 2 }]} />
@@ -379,7 +502,7 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
 
             <View style={styles.cameraHintBox}>
               <Text style={styles.cameraHint}>
-                Centre your face in the oval — capturing in {secondsLeft}s
+                Centre your face · capturing in {secondsLeft}s
               </Text>
             </View>
           </View>
@@ -401,22 +524,52 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
         )}
 
         {/* ── Step 4a: Success ── */}
-        {step === "success" && (
+        {step === "success" && verifyResult && (
           <View style={styles.fullScreen}>
             <View style={styles.centred}>
-              <View style={[styles.resultCircle, { backgroundColor: "#16A34A22" }]}>
-                <Ionicons name="checkmark-circle" size={80} color="#16A34A" />
+              <View style={[styles.resultCircle, { backgroundColor: successIconColor() + "22" }]}>
+                <Ionicons name={successIconName()} size={80} color={successIconColor()} />
               </View>
-              <Text style={styles.resultTitle}>Identity Verified</Text>
-              <Text style={styles.resultName}>{selected?.name}</Text>
-              <View style={[styles.scorePill, { backgroundColor: "#DCFCE7" }]}>
-                <Ionicons name="analytics-outline" size={14} color="#16A34A" />
-                <Text style={[styles.scoreText, { color: "#16A34A" }]}>
+
+              <Text style={styles.resultTitle}>{successTitle()}</Text>
+              <Text style={[styles.resultName, { color: "rgba(255,255,255,0.65)" }]}>{selected?.name}</Text>
+              <Text style={styles.resultSub}>{successMessage()}</Text>
+
+              {/* Time info */}
+              <View style={styles.timeRow}>
+                {verifyResult.checkIn && (
+                  <View style={styles.timePill}>
+                    <Ionicons name="log-in-outline" size={13} color="#94A3B8" />
+                    <Text style={styles.timePillText}>In {verifyResult.checkIn}</Text>
+                  </View>
+                )}
+                {verifyResult.checkOut && (
+                  <View style={styles.timePill}>
+                    <Ionicons name="log-out-outline" size={13} color="#94A3B8" />
+                    <Text style={styles.timePillText}>Out {verifyResult.checkOut}</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Hours worked (only on check-out) */}
+              {verifyResult.hoursWorked != null && verifyResult.action === "check_out" && (
+                <View style={[styles.scorePill, { backgroundColor: "#1E293B" }]}>
+                  <Ionicons name="time-outline" size={14} color="#94A3B8" />
+                  <Text style={[styles.scoreText, { color: "#94A3B8" }]}>
+                    {verifyResult.hoursWorked}h worked today
+                  </Text>
+                </View>
+              )}
+
+              {/* Match score */}
+              <View style={[styles.scorePill, { backgroundColor: successIconColor() + "22" }]}>
+                <Ionicons name="analytics-outline" size={14} color={successIconColor()} />
+                <Text style={[styles.scoreText, { color: successIconColor() }]}>
                   Match Score: {matchScore}%
                 </Text>
               </View>
-              <Text style={styles.resultSub}>Attendance marked as Present ✓</Text>
-              <Text style={[styles.resultSub, { marginTop: 4, opacity: 0.5 }]}>
+
+              <Text style={[styles.resultSub, { marginTop: 4, opacity: 0.4 }]}>
                 Returning to Dashboard…
               </Text>
             </View>
@@ -502,57 +655,53 @@ const styles = StyleSheet.create({
 
   fullScreen: { flex: 1 },
   topBar: {
-    position: "absolute", top: 0, left: 0, right: 0, zIndex: 10,
+    position: "absolute", top: 0, left: 0, right: 0, zIndex: 20,
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 20, paddingTop: 56, paddingBottom: 16,
+    paddingHorizontal: 20, paddingTop: 56, paddingBottom: 12,
   },
   hudBtn: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center",
   },
   empPill: {
     flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: "rgba(0,0,0,0.45)", borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 20,
     paddingHorizontal: 14, paddingVertical: 8,
   },
   empPillText: { color: "#fff", fontSize: 13, fontFamily: "Inter_600SemiBold" },
+
+  // Status bar (below top bar)
+  statusBar: {
+    position: "absolute", top: 116, left: 0, right: 0, zIndex: 20,
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, paddingHorizontal: 20,
+  },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  statusText: { color: "rgba(255,255,255,0.8)", fontSize: 12, fontFamily: "Inter_500Medium" },
+  actionBadge: {
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
+  },
+  actionBadgeText: { color: "#fff", fontSize: 11, fontFamily: "Inter_700Bold" },
 
   ovalWrapper: {
     position: "absolute", top: 0, left: 0, right: 0, bottom: 80,
     alignItems: "center", justifyContent: "center",
   },
-  ovalBg: {
-    position: "absolute",
-    backgroundColor: "rgba(0,0,0,0.15)",
-  },
+  ovalBg: { position: "absolute", backgroundColor: "rgba(0,0,0,0.15)" },
   ovalRing: { position: "absolute" },
-  countdownOverlay: {
-    position: "absolute",
-    bottom: -48,
-    alignItems: "center",
-  },
-  countdownNum: {
-    color: "#fff",
-    fontSize: 48,
-    fontFamily: "Inter_700Bold",
-    opacity: 0.9,
-  },
+  countdownOverlay: { position: "absolute", bottom: -48, alignItems: "center" },
+  countdownNum: { color: "#fff", fontSize: 48, fontFamily: "Inter_700Bold", opacity: 0.9 },
 
   cameraHintBox: {
-    position: "absolute",
-    bottom: 44,
-    left: 0, right: 0,
-    alignItems: "center",
-    paddingHorizontal: 40,
+    position: "absolute", bottom: 44, left: 0, right: 0,
+    alignItems: "center", paddingHorizontal: 40,
   },
   cameraHint: {
-    color: "rgba(255,255,255,0.6)",
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
+    color: "rgba(255,255,255,0.6)", fontSize: 14,
+    fontFamily: "Inter_400Regular", textAlign: "center",
   },
 
-  centred: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16, paddingHorizontal: 32 },
+  centred: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 32 },
   matchingCircle: {
     width: 120, height: 120, borderRadius: 60, borderWidth: 2,
     alignItems: "center", justifyContent: "center",
@@ -561,8 +710,17 @@ const styles = StyleSheet.create({
   matchingDesc: { color: "rgba(255,255,255,0.5)", fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center" },
 
   resultCircle: { width: 120, height: 120, borderRadius: 60, alignItems: "center", justifyContent: "center" },
-  resultTitle: { color: "#fff", fontSize: 24, fontFamily: "Inter_700Bold" },
-  resultName: { color: "rgba(255,255,255,0.7)", fontSize: 17, fontFamily: "Inter_500Medium" },
+  resultTitle: { color: "#fff", fontSize: 22, fontFamily: "Inter_700Bold", textAlign: "center" },
+  resultName: { fontSize: 16, fontFamily: "Inter_500Medium" },
+
+  timeRow: { flexDirection: "row", gap: 10, flexWrap: "wrap", justifyContent: "center" },
+  timePill: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12,
+  },
+  timePillText: { color: "#94A3B8", fontSize: 13, fontFamily: "Inter_500Medium" },
+
   scorePill: {
     flexDirection: "row", alignItems: "center", gap: 6,
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,

@@ -206,4 +206,50 @@ router.patch("/attendance/:id", requireAuth, async (req, res): Promise<void> => 
   });
 });
 
+// ─── Today's check-in/out status for a single employee ─────────────────────
+router.get("/attendance/today-status", requireAuth, async (req, res): Promise<void> => {
+  const { adminId } = (req as any).user;
+  const employeeId = parseInt(req.query.employeeId as string, 10);
+
+  if (!employeeId || isNaN(employeeId)) {
+    res.status(400).json({ error: "employeeId query param is required" });
+    return;
+  }
+
+  // Ensure the employee belongs to this admin
+  const [employee] = await db
+    .select()
+    .from(employeesTable)
+    .where(and(eq(employeesTable.id, employeeId), eq(employeesTable.adminId, adminId)));
+
+  if (!employee) {
+    res.status(404).json({ error: "Employee not found" });
+    return;
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const records = await db
+    .select()
+    .from(attendanceTable)
+    .where(and(eq(attendanceTable.employeeId, employeeId), eq(attendanceTable.date, today)));
+
+  const present = records.find((r) => r.status === "present");
+
+  if (!present) {
+    res.json({ hasRecord: false, status: null, checkIn: null, checkOut: null, expectedAction: "check_in" });
+    return;
+  }
+
+  const expectedAction = present.checkOut ? "already_checked_out" : "check_out";
+
+  res.json({
+    hasRecord: true,
+    status: present.status,
+    checkIn: present.checkIn ?? null,
+    checkOut: present.checkOut ?? null,
+    expectedAction,
+  });
+});
+
 export default router;
