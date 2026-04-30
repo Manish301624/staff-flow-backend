@@ -24,7 +24,6 @@ import { useColors } from "@/hooks/useColors";
 import { useVerifyAttendance } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 
-// Countdown before auto-capture (ms)
 const COUNTDOWN_MS = 3000;
 
 type VerifyStep =
@@ -53,15 +52,18 @@ interface Props {
 export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: Props) {
   const colors = useColors();
   const queryClient = useQueryClient();
+
   const [step, setStep] = useState<VerifyStep>("pick");
-  const [selected, setSelected] = useState<Employee | null>(null);
+  // Use a ref so timer callbacks always see the latest employee without stale-closure issues
+  const selectedRef = useRef<Employee | null>(null);
+  const [selectedDisplay, setSelectedDisplay] = useState<Employee | null>(null);
+
   const [matchScore, setMatchScore] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [secondsLeft, setSecondsLeft] = useState(3);
 
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
-  // Track ALL active timer IDs so we can cancel every one
   const timerIds = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const capturedRef = useRef(false);
 
@@ -70,31 +72,27 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
 
   const { mutateAsync: verifyAttendance } = useVerifyAttendance();
 
-  /** Cancel every pending timer */
   const clearAllTimers = useCallback(() => {
-    timerIds.current.forEach((id) => clearTimeout(id));
+    timerIds.current.forEach(clearTimeout);
     timerIds.current.clear();
   }, []);
 
-  /** Helper — create a tracked setTimeout */
-  const safeTimeout = useCallback(
-    (fn: () => void, ms: number) => {
-      const id = setTimeout(() => {
-        timerIds.current.delete(id);
-        fn();
-      }, ms);
-      timerIds.current.add(id);
-      return id;
-    },
-    [],
-  );
+  const safeTimeout = useCallback((fn: () => void, ms: number) => {
+    const id = setTimeout(() => {
+      timerIds.current.delete(id);
+      fn();
+    }, ms);
+    timerIds.current.add(id);
+    return id;
+  }, []);
 
   // Reset when modal closes
   useEffect(() => {
     if (!visible) {
       clearAllTimers();
       setStep("pick");
-      setSelected(null);
+      selectedRef.current = null;
+      setSelectedDisplay(null);
       setMatchScore(0);
       setErrorMsg("");
       setSecondsLeft(3);
@@ -118,8 +116,8 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
     pulseAnim.setValue(1);
   }, [step]);
 
-  const submitVerification = useCallback(async (imageBase64: string) => {
-    if (!selected) return;
+  // Employee is passed directly — never read from state in timer callbacks
+  const submitVerification = useCallback(async (emp: Employee, imageBase64: string) => {
     clearAllTimers();
     setStep("verifying");
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -127,11 +125,11 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
     const today = new Date().toISOString().slice(0, 10);
     const checkIn = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
-    console.log("[FaceAttendance] Sending image to backend for employee:", selected.id);
+    console.log("[FaceAttendance] Sending to backend — employeeId:", emp.id, "imageLen:", imageBase64.length);
 
     try {
       const result = await verifyAttendance({
-        data: { employeeId: selected.id, imageBase64, date: today, checkIn },
+        data: { employeeId: emp.id, imageBase64, date: today, checkIn },
       });
 
       console.log("[FaceAttendance] Match Score:", result.matchScore, "| Matched:", result.matched);
@@ -158,9 +156,8 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
       setErrorMsg(msg);
       setStep("error");
     }
-  }, [selected, verifyAttendance, queryClient, onSuccess, clearAllTimers]);
+  }, [verifyAttendance, queryClient, onSuccess, clearAllTimers]);
 
-  /** Convert a file URI to a base64 data-URL using expo-file-system */
   const uriToBase64 = useCallback(async (uri: string): Promise<string | null> => {
     try {
       const b64 = await FileSystem.readAsStringAsync(uri, {
@@ -168,18 +165,17 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
       });
       return b64 ? `data:image/jpeg;base64,${b64}` : null;
     } catch (e) {
-      console.log("[FaceAttendance] FileSystem read failed:", e);
+      console.log("[FaceAttendance] FileSystem fallback failed:", e);
       return null;
     }
   }, []);
 
-  // Auto-capture after countdown
-  const startCountdown = useCallback(() => {
+  // emp is passed directly — no stale closure on selectedRef
+  const startCountdown = useCallback((emp: Employee) => {
     capturedRef.current = false;
     setSecondsLeft(3);
     progressAnim.setValue(0);
 
-    // Animate the ring over COUNTDOWN_MS
     Animated.timing(progressAnim, {
       toValue: 1,
       duration: COUNTDOWN_MS,
@@ -187,59 +183,53 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
       easing: Easing.linear,
     }).start();
 
-    // Tick seconds for display (separate tracked timers)
+    // Tick display
     safeTimeout(() => setSecondsLeft(2), 1000);
     safeTimeout(() => setSecondsLeft(1), 2000);
     safeTimeout(() => setSecondsLeft(0), 3000);
 
-    // Actual capture trigger
+    // Actual capture
     safeTimeout(async () => {
       if (capturedRef.current) {
-        console.log("[FaceAttendance] Already captured — skipping duplicate trigger");
+        console.log("[FaceAttendance] Skipping duplicate capture");
         return;
       }
       if (!cameraRef.current) {
-        console.log("[FaceAttendance] Camera ref is null — cannot capture");
         setErrorMsg("Camera not ready. Please try again.");
         setStep("error");
         return;
       }
 
       capturedRef.current = true;
-      console.log("[FaceAttendance] Auto-capture triggered");
+      console.log("[FaceAttendance] Auto-capture triggered for emp:", emp.id);
 
       try {
         const pic = await cameraRef.current.takePictureAsync({ quality: 0.7, base64: true });
         console.log("[FaceAttendance] Picture taken — uri:", pic?.uri, "has base64:", !!pic?.base64);
 
-        if (!pic?.uri) {
-          throw new Error("Camera returned no picture");
-        }
+        if (!pic?.uri) throw new Error("Camera returned no picture");
 
-        // Primary: use base64 from takePictureAsync
-        // Fallback: read via FileSystem if base64 is missing (known Android/Expo Go quirk)
-        let imageBase64: string | null = pic.base64
+        const imageBase64: string | null = pic.base64
           ? `data:image/jpeg;base64,${pic.base64}`
           : await uriToBase64(pic.uri);
 
-        if (!imageBase64) {
-          throw new Error("Could not read image data from camera");
-        }
+        if (!imageBase64) throw new Error("Could not read image data from camera");
 
-        await submitVerification(imageBase64);
+        await submitVerification(emp, imageBase64);
       } catch (e: any) {
         console.log("[FaceAttendance] Capture error:", e?.message ?? e);
         setErrorMsg(e?.message ?? "Could not capture photo. Please try again.");
         setStep("error");
       }
     }, COUNTDOWN_MS);
-  }, [progressAnim, submitVerification, safeTimeout, uriToBase64]);
+  }, [progressAnim, safeTimeout, submitVerification, uriToBase64]);
 
   const openCamera = useCallback(async (emp: Employee) => {
-    setSelected(emp);
+    // Store in ref immediately so retryCamera can access it
+    selectedRef.current = emp;
+    setSelectedDisplay(emp);
 
     if (Platform.OS === "web") {
-      // Web: use image picker instead of live camera
       const { default: ImagePicker } = await import("expo-image-picker");
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
@@ -248,14 +238,10 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
       });
       if (!res.canceled && res.assets?.[0]) {
         const asset = res.assets[0];
-        let imageBase64: string | null = asset.base64
+        const imageBase64: string | null = asset.base64
           ? `data:image/jpeg;base64,${asset.base64}`
-          : asset.uri
-            ? await uriToBase64(asset.uri)
-            : null;
-        if (imageBase64) {
-          await submitVerification(imageBase64);
-        }
+          : asset.uri ? await uriToBase64(asset.uri) : null;
+        if (imageBase64) await submitVerification(emp, imageBase64);
       }
       return;
     }
@@ -270,19 +256,19 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
     }
 
     setStep("camera");
-    // Give camera time to warm up, then start countdown
-    safeTimeout(startCountdown, 900);
+    // Pass emp directly into startCountdown — avoids stale closure
+    safeTimeout(() => startCountdown(emp), 900);
   }, [permission, requestPermission, submitVerification, startCountdown, safeTimeout, uriToBase64]);
 
   const retryCamera = useCallback(() => {
     clearAllTimers();
     capturedRef.current = false;
-    if (!selected) { setStep("pick"); return; }
+    const emp = selectedRef.current;
+    if (!emp) { setStep("pick"); return; }
     setStep("camera");
-    safeTimeout(startCountdown, 900);
-  }, [selected, startCountdown, safeTimeout, clearAllTimers]);
+    safeTimeout(() => startCountdown(emp), 900);
+  }, [startCountdown, safeTimeout, clearAllTimers]);
 
-  // Ring size
   const RING_SIZE = 240;
   const RING_BORDER = 4;
 
@@ -290,6 +276,9 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
     inputRange: [0, 0.5, 1],
     outputRange: ["#576DFA", "#FBBF24", "#16A34A"],
   });
+
+  // Use selectedDisplay for rendering (updated via setSelectedDisplay)
+  const selected = selectedDisplay;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
@@ -347,9 +336,8 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
         {/* ── Step 2: Live camera with countdown ── */}
         {step === "camera" && (
           <View style={styles.fullScreen}>
-            {/* Top bar */}
             <View style={styles.topBar}>
-              <Pressable style={styles.hudBtn} onPress={() => { clearAllTimers(); setStep("pick"); setSelected(null); }}>
+              <Pressable style={styles.hudBtn} onPress={() => { clearAllTimers(); setStep("pick"); selectedRef.current = null; setSelectedDisplay(null); }}>
                 <Ionicons name="chevron-back" size={22} color="#fff" />
               </Pressable>
               {selected && (
@@ -363,10 +351,8 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
               </Pressable>
             </View>
 
-            {/* Camera */}
             <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="front" />
 
-            {/* Animated oval guide */}
             <View style={styles.ovalWrapper}>
               <View style={{ width: RING_SIZE, height: RING_SIZE + 40, position: "relative", alignItems: "center", justifyContent: "center" }}>
                 <View style={[styles.ovalBg, { width: RING_SIZE, height: RING_SIZE + 40, borderRadius: RING_SIZE / 2 }]} />
@@ -388,7 +374,6 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
               </View>
             </View>
 
-            {/* Hint */}
             <View style={styles.cameraHintBox}>
               <Text style={styles.cameraHint}>
                 Centre your face in the oval — capturing in {secondsLeft}s
@@ -537,9 +522,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     backgroundColor: "rgba(0,0,0,0.15)",
   },
-  ovalRing: {
-    position: "absolute",
-  },
+  ovalRing: { position: "absolute" },
   countdownOverlay: {
     position: "absolute",
     bottom: -48,
