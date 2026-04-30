@@ -108,7 +108,7 @@ export default function SalaryScreen() {
     setMonth(nm); setYear(ny);
   };
 
-  const employees: any[] = data?.employees ?? [];
+  const employees: any[] = Array.isArray(data) ? data : [];
   const totalPayable = employees.reduce((s, e) => s + e.netSalary, 0);
   const totalPaid = employees.reduce((s, e) => s + e.paid, 0);
   const totalPending = employees.reduce((s, e) => s + e.pending, 0);
@@ -130,6 +130,7 @@ export default function SalaryScreen() {
                   amount: emp.pending,
                   type: "salary",
                   method: "bank",
+                  status: "paid",
                   month,
                   year,
                   note: `Salary for ${MONTH_NAMES[month - 1]} ${year}`,
