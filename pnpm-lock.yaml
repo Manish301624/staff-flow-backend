@@ -626,9 +626,6 @@ importers:
       expo-camera:
         specifier: ^55.0.16
         version: 55.0.16(expo@55.0.18)(react-native-web@0.21.2(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react-native@0.83.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
-      expo-face-detector:
-        specifier: ^13.0.2
-        version: 13.0.2(expo@55.0.18)
       expo-secure-store:
         specifier: ^55.0.13
         version: 55.0.13(expo@55.0.18)
@@ -3772,11 +3769,6 @@ packages:
     peerDependencies:
       expo: '*'
       react-native: '*'
-
-  expo-face-detector@13.0.2:
-    resolution: {integrity: sha512-HxpPdS+/SOilGDGSDSgvtQsncsx1lEV8HwvUKUeegb5v0h8I8Bcnz2nll5xcrJ8+Vk/DQkMr5i0fTGLAUHiXLw==}
-    peerDependencies:
-      expo: '*'
 
   expo-file-system@55.0.17:
     resolution: {integrity: sha512-d27K1cagUOt2BwxwPka9KW8Znu5kN1tnairozCzzCRZviZFtWnBxwFuJ3KU6MAbav/9UhSMkp5Ve/oZ+SR0UgQ==}
@@ -9921,10 +9913,6 @@ snapshots:
       react-native: 0.83.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)
     transitivePeerDependencies:
       - supports-color
-
-  expo-face-detector@13.0.2(expo@55.0.18):
-    dependencies:
-      expo: 55.0.18(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.10)(expo-router@55.0.13)(react-dom@19.2.0(react@19.2.0))(react-native-worklets@0.7.4(@babel/core@7.29.0)(react-native@0.83.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
 
   expo-file-system@55.0.17(expo@55.0.18)(react-native@0.83.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)):
     dependencies:
