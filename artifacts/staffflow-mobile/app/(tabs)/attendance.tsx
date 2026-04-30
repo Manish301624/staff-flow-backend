@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator,
   Platform, Modal, ScrollView, Alert, TextInput,
@@ -85,10 +86,16 @@ export default function AttendanceScreen() {
   const [markAll, setMarkAll] = useState(false);
   const [bulkStatus, setBulkStatus] = useState("present");
 
-  const { data: attendance, isLoading, refetch } = useListAttendance({ month, year });
+  const queryClient = useQueryClient();
+  const { data: attendance, isLoading } = useListAttendance({ month, year });
   const { data: summary } = useGetAttendanceSummary({ month, year });
   const { data: employees } = useListEmployees({});
   const markAttendance = useMarkAttendance();
+
+  const invalidateAttendance = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/attendance"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/attendance/summary"] });
+  };
 
   const topPadding = Platform.OS === "web" ? 67 : 0;
 
@@ -143,7 +150,7 @@ export default function AttendanceScreen() {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setShowMarkModal(false);
           setMarkForm({ employeeId: null, date: todayStr(), status: "present", checkIn: "", checkOut: "" });
-          refetch();
+          invalidateAttendance();
         },
         onError: () => Alert.alert("Error", "Failed to mark attendance."),
       }
