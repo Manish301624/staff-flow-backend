@@ -138,9 +138,12 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
       if (result.matched) {
         setStep("success");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        await queryClient.invalidateQueries({ queryKey: ["listAttendance"] });
-        await queryClient.invalidateQueries({ queryKey: ["getAttendanceSummary"] });
-        await queryClient.invalidateQueries({ queryKey: ["getDashboardStats"] });
+        // Query keys match what the generated hooks use (URL-path based)
+        await queryClient.invalidateQueries({ queryKey: ["/api/attendance"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/attendance/summary"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/dashboard/insights"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/dashboard/attendance-trend"] });
         setTimeout(() => onSuccess(), 2000);
       } else {
         setStep("failed");
