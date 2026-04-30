@@ -18,16 +18,13 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import * as FaceDetector from "expo-face-detector";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useVerifyAttendance } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 
-// — constants —
-const POLL_INTERVAL_MS = 600;
-const FACE_HOLD_MS = 1500;
-const FACE_HOLD_FRAMES = Math.ceil(FACE_HOLD_MS / POLL_INTERVAL_MS); // ≥3 frames
+// Countdown before auto-capture (ms)
+const COUNTDOWN_MS = 3000;
 
 type VerifyStep =
   | "pick"
@@ -59,36 +56,40 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
   const [selected, setSelected] = useState<Employee | null>(null);
   const [matchScore, setMatchScore] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string>("");
-  const [faceDetected, setFaceDetected] = useState(false);
-  const [holdProgress, setHoldProgress] = useState(0); // 0–1
+  const [secondsLeft, setSecondsLeft] = useState(3);
 
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
-  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const consecutiveRef = useRef(0);
-  const isCapturingRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const capturedRef = useRef(false);
+
   const progressAnim = useState(() => new Animated.Value(0))[0];
   const pulseAnim = useState(() => new Animated.Value(1))[0];
 
   const { mutateAsync: verifyAttendance } = useVerifyAttendance();
 
-  // Reset state when modal closes
+  const clearTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  // Reset when modal closes
   useEffect(() => {
     if (!visible) {
-      stopPolling();
+      clearTimer();
       setStep("pick");
       setSelected(null);
       setMatchScore(0);
       setErrorMsg("");
-      setFaceDetected(false);
-      setHoldProgress(0);
-      consecutiveRef.current = 0;
-      isCapturingRef.current = false;
+      setSecondsLeft(3);
+      capturedRef.current = false;
       progressAnim.setValue(0);
     }
-  }, [visible]);
+  }, [visible, clearTimer]);
 
-  // Pulse animation during "verifying"
+  // Pulse while verifying
   useEffect(() => {
     if (step === "verifying") {
       const anim = Animated.loop(
@@ -103,17 +104,9 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
     pulseAnim.setValue(1);
   }, [step]);
 
-  // — face detection polling —
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearTimeout(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
-
   const submitVerification = useCallback(async (imageBase64: string) => {
     if (!selected) return;
-    stopPolling();
+    clearTimer();
     setStep("verifying");
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -128,7 +121,6 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
       });
 
       console.log("[FaceAttendance] Match Score:", result.matchScore, "| Matched:", result.matched);
-
       setMatchScore(result.matchScore);
 
       if (result.matched) {
@@ -148,79 +140,56 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
       setErrorMsg(msg);
       setStep("error");
     }
-  }, [selected, verifyAttendance, queryClient, onSuccess, stopPolling]);
+  }, [selected, verifyAttendance, queryClient, onSuccess, clearTimer]);
 
-  const pollFaceDetection = useCallback(async () => {
-    if (isCapturingRef.current || !cameraRef.current) return;
+  // Auto-capture after countdown
+  const startCountdown = useCallback(() => {
+    capturedRef.current = false;
+    setSecondsLeft(3);
+    progressAnim.setValue(0);
 
-    try {
-      const pic = await cameraRef.current.takePictureAsync({
-        quality: 0.25,
-        skipProcessing: true,
-        base64: false,
-      });
+    // Animate the ring over COUNTDOWN_MS
+    Animated.timing(progressAnim, {
+      toValue: 1,
+      duration: COUNTDOWN_MS,
+      useNativeDriver: false,
+      easing: Easing.linear,
+    }).start();
 
-      if (!pic?.uri) {
-        scheduleNextPoll();
-        return;
+    // Tick seconds for display
+    let remaining = 3;
+    const tick = () => {
+      remaining -= 1;
+      setSecondsLeft(remaining);
+      if (remaining > 0) {
+        timerRef.current = setTimeout(tick, 1000);
       }
+    };
+    timerRef.current = setTimeout(tick, 1000);
 
-      // Detect faces in the captured frame
-      const result = await FaceDetector.detectFacesAsync(pic.uri, {
-        mode: FaceDetector.FaceDetectorMode.fast,
-        detectLandmarks: FaceDetector.FaceDetectorLandmarks.none,
-        runClassifications: FaceDetector.FaceDetectorClassifications.none,
-      });
+    // Actual capture trigger
+    timerRef.current = setTimeout(async () => {
+      if (capturedRef.current || !cameraRef.current) return;
+      capturedRef.current = true;
+      console.log("[FaceAttendance] Face Detected: auto-capture triggered");
 
-      const hasFace = result.faces.length > 0;
-      console.log("[FaceAttendance] Face Detected:", hasFace, "| Consecutive frames:", consecutiveRef.current);
-      setFaceDetected(hasFace);
-
-      if (hasFace) {
-        consecutiveRef.current += 1;
-        const progress = Math.min(consecutiveRef.current / FACE_HOLD_FRAMES, 1);
-        setHoldProgress(progress);
-        Animated.timing(progressAnim, {
-          toValue: progress,
-          duration: POLL_INTERVAL_MS * 0.9,
-          useNativeDriver: false,
-        }).start();
-
-        if (consecutiveRef.current >= FACE_HOLD_FRAMES) {
-          // Held long enough — capture final at good quality
-          isCapturingRef.current = true;
-          stopPolling();
-          const finalPic = await cameraRef.current.takePictureAsync({
-            quality: 0.75,
-            base64: true,
-          });
-          if (finalPic?.base64) {
-            const imageBase64 = `data:image/jpeg;base64,${finalPic.base64}`;
-            await submitVerification(imageBase64);
-          }
-          return;
+      try {
+        const pic = await cameraRef.current.takePictureAsync({ quality: 0.75, base64: true });
+        if (pic?.base64) {
+          await submitVerification(`data:image/jpeg;base64,${pic.base64}`);
         }
-      } else {
-        consecutiveRef.current = 0;
-        setHoldProgress(0);
-        progressAnim.setValue(0);
+      } catch {
+        setErrorMsg("Could not capture photo. Please try again.");
+        setStep("error");
       }
-    } catch {
-      // Camera not ready yet — ignore
-    }
+    }, COUNTDOWN_MS);
+  }, [progressAnim, submitVerification]);
 
-    scheduleNextPoll();
-  }, [stopPolling, submitVerification, progressAnim]);
-
-  const scheduleNextPoll = useCallback(() => {
-    pollRef.current = setTimeout(pollFaceDetection, POLL_INTERVAL_MS);
-  }, [pollFaceDetection]);
-
-  const startCamera = useCallback(async (emp: Employee) => {
+  const openCamera = useCallback(async (emp: Employee) => {
     setSelected(emp);
 
     if (Platform.OS === "web") {
-      // Web fallback — open image picker
+      // Web: use image picker instead of camera
       const { default: ImagePicker } = await import("expo-image-picker");
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
@@ -228,6 +197,7 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
         base64: true,
       });
       if (!res.canceled && res.assets?.[0]?.base64) {
+        setSelected(emp);
         await submitVerification(`data:image/jpeg;base64,${res.assets[0].base64}`);
       }
       return;
@@ -242,30 +212,26 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
       }
     }
 
-    consecutiveRef.current = 0;
-    isCapturingRef.current = false;
-    setFaceDetected(false);
-    setHoldProgress(0);
-    progressAnim.setValue(0);
     setStep("camera");
-    // Start polling after the camera mounts (short delay)
-    pollRef.current = setTimeout(pollFaceDetection, 800);
-  }, [permission, requestPermission, submitVerification, pollFaceDetection, progressAnim]);
+    // Give camera time to warm up, then start countdown
+    timerRef.current = setTimeout(startCountdown, 900);
+  }, [permission, requestPermission, submitVerification, startCountdown]);
 
   const retryCamera = useCallback(() => {
     if (!selected) { setStep("pick"); return; }
-    consecutiveRef.current = 0;
-    isCapturingRef.current = false;
-    setFaceDetected(false);
-    setHoldProgress(0);
-    progressAnim.setValue(0);
+    capturedRef.current = false;
     setStep("camera");
-    pollRef.current = setTimeout(pollFaceDetection, 800);
-  }, [selected, pollFaceDetection, progressAnim]);
+    timerRef.current = setTimeout(startCountdown, 900);
+  }, [selected, startCountdown]);
 
-  // — ring progress color —
-  const ringColor = faceDetected ? "#16A34A" : "#576DFA44";
-  const ringFillColor = faceDetected ? "#16A34A" : "#576DFA";
+  // Ring size
+  const RING_SIZE = 240;
+  const RING_BORDER = 4;
+
+  const ringColor = progressAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ["#576DFA", "#FBBF24", "#16A34A"],
+  });
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
@@ -297,7 +263,7 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
               renderItem={({ item }) => (
                 <Pressable
                   style={[styles.empCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => startCamera(item)}
+                  onPress={() => openCamera(item)}
                 >
                   <View style={[styles.empAvatar, { backgroundColor: colors.primary + "22" }]}>
                     <Text style={[styles.empAvatarText, { color: colors.primary }]}>
@@ -320,12 +286,12 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
           </View>
         )}
 
-        {/* ── Step 2: Live camera with auto-detection ── */}
+        {/* ── Step 2: Live camera with countdown ── */}
         {step === "camera" && (
           <View style={styles.fullScreen}>
             {/* Top bar */}
             <View style={styles.topBar}>
-              <Pressable style={styles.hudBtn} onPress={() => { stopPolling(); setStep("pick"); setSelected(null); }}>
+              <Pressable style={styles.hudBtn} onPress={() => { clearTimer(); setStep("pick"); setSelected(null); }}>
                 <Ionicons name="chevron-back" size={22} color="#fff" />
               </Pressable>
               {selected && (
@@ -334,57 +300,43 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
                   <Text style={styles.empPillText}>{selected.name}</Text>
                 </View>
               )}
-              <Pressable style={styles.hudBtn} onPress={() => { stopPolling(); onClose(); }}>
+              <Pressable style={styles.hudBtn} onPress={() => { clearTimer(); onClose(); }}>
                 <Ionicons name="close" size={22} color="#fff" />
               </Pressable>
             </View>
 
-            {/* Camera view */}
-            <View style={styles.cameraWrapper}>
-              <CameraView
-                ref={cameraRef}
-                style={StyleSheet.absoluteFill}
-                facing="front"
-              />
+            {/* Camera */}
+            <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="front" />
 
-              {/* Face oval guide */}
-              <View style={styles.ovalOuter}>
-                <View style={[styles.ovalRing, { borderColor: ringColor }]}>
-                  {/* Progress arc approximated by a filled ring */}
-                  <Animated.View
-                    style={[
-                      styles.ovalFill,
-                      {
-                        opacity: progressAnim,
-                        borderColor: ringFillColor,
-                      },
-                    ]}
-                  />
+            {/* Animated oval guide */}
+            <View style={styles.ovalWrapper}>
+              <View style={{ width: RING_SIZE, height: RING_SIZE + 40, position: "relative", alignItems: "center", justifyContent: "center" }}>
+                {/* Background oval */}
+                <View style={[styles.ovalBg, { width: RING_SIZE, height: RING_SIZE + 40, borderRadius: RING_SIZE / 2 }]} />
+                {/* Animated border ring */}
+                <Animated.View
+                  style={[
+                    styles.ovalRing,
+                    {
+                      width: RING_SIZE,
+                      height: RING_SIZE + 40,
+                      borderRadius: RING_SIZE / 2,
+                      borderWidth: RING_BORDER,
+                      borderColor: ringColor,
+                    },
+                  ]}
+                />
+                {/* Countdown number */}
+                <View style={styles.countdownOverlay}>
+                  <Text style={styles.countdownNum}>{secondsLeft}</Text>
                 </View>
-              </View>
-
-              {/* Status badge */}
-              <View style={styles.detectionBadge}>
-                {faceDetected ? (
-                  <View style={[styles.badge, { backgroundColor: "#16A34A22", borderColor: "#16A34A" }]}>
-                    <View style={styles.pulseDot} />
-                    <Text style={[styles.badgeText, { color: "#16A34A" }]}>
-                      Face detected — hold still…
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={[styles.badge, { backgroundColor: "#FFFFFF11", borderColor: "#FFFFFF22" }]}>
-                    <Text style={[styles.badgeText, { color: "rgba(255,255,255,0.6)" }]}>
-                      Position face in the oval
-                    </Text>
-                  </View>
-                )}
               </View>
             </View>
 
-            <View style={styles.cameraFooter}>
+            {/* Hint */}
+            <View style={styles.cameraHintBox}>
               <Text style={styles.cameraHint}>
-                Keep your face centred. Capture is automatic.
+                Centre your face in the oval — capturing in {secondsLeft}s
               </Text>
             </View>
           </View>
@@ -439,10 +391,10 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
               <View style={[styles.scorePill, { backgroundColor: "#FEE2E2" }]}>
                 <Ionicons name="analytics-outline" size={14} color="#DC2626" />
                 <Text style={[styles.scoreText, { color: "#DC2626" }]}>
-                  Match Score: {matchScore}%  (below threshold)
+                  Match Score: {matchScore}%
                 </Text>
               </View>
-              <Text style={styles.resultSub}>The captured face does not match the enrolled profile.</Text>
+              <Text style={styles.resultSub}>Face does not match the enrolled profile.</Text>
               <View style={styles.failActions}>
                 <Pressable style={[styles.failBtn, { backgroundColor: "#576DFA" }]} onPress={retryCamera}>
                   <Ionicons name="refresh" size={16} color="#fff" />
@@ -485,7 +437,6 @@ export function FaceAttendanceModal({ visible, employees, onSuccess, onClose }: 
 const styles = StyleSheet.create({
   root: { flex: 1 },
 
-  // Pick step
   pickContainer: { flex: 1 },
   pickHeader: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
@@ -506,7 +457,6 @@ const styles = StyleSheet.create({
   empName: { fontSize: 15, fontFamily: "Inter_600SemiBold", marginBottom: 2 },
   empRole: { fontSize: 12, fontFamily: "Inter_400Regular" },
 
-  // Camera step
   fullScreen: { flex: 1 },
   topBar: {
     position: "absolute", top: 0, left: 0, right: 0, zIndex: 10,
@@ -515,54 +465,52 @@ const styles = StyleSheet.create({
   },
   hudBtn: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center",
   },
   empPill: {
     flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: "rgba(0,0,0,0.4)", borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.45)", borderRadius: 20,
     paddingHorizontal: 14, paddingVertical: 8,
   },
   empPillText: { color: "#fff", fontSize: 13, fontFamily: "Inter_600SemiBold" },
 
-  cameraWrapper: { flex: 1, position: "relative", overflow: "hidden" },
-
-  ovalOuter: {
-    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+  ovalWrapper: {
+    position: "absolute", top: 0, left: 0, right: 0, bottom: 80,
     alignItems: "center", justifyContent: "center",
   },
+  ovalBg: {
+    position: "absolute",
+    backgroundColor: "rgba(0,0,0,0.15)",
+  },
   ovalRing: {
-    width: 220, height: 280, borderRadius: 130,
-    borderWidth: 3, alignItems: "center", justifyContent: "center",
+    position: "absolute",
   },
-  ovalFill: {
-    width: 214, height: 274, borderRadius: 127,
-    borderWidth: 3,
-  },
-
-  detectionBadge: {
-    position: "absolute", bottom: 24, left: 0, right: 0,
+  countdownOverlay: {
+    position: "absolute",
+    bottom: -48,
     alignItems: "center",
   },
-  badge: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1,
+  countdownNum: {
+    color: "#fff",
+    fontSize: 48,
+    fontFamily: "Inter_700Bold",
+    opacity: 0.9,
   },
-  pulseDot: {
-    width: 8, height: 8, borderRadius: 4, backgroundColor: "#16A34A",
-  },
-  badgeText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
 
-  cameraFooter: {
-    position: "absolute", bottom: 0, left: 0, right: 0,
-    paddingBottom: 44, paddingHorizontal: 32, alignItems: "center",
+  cameraHintBox: {
+    position: "absolute",
+    bottom: 44,
+    left: 0, right: 0,
+    alignItems: "center",
+    paddingHorizontal: 40,
   },
   cameraHint: {
-    color: "rgba(255,255,255,0.4)", fontSize: 13,
-    fontFamily: "Inter_400Regular", textAlign: "center",
-    marginTop: 76,
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
   },
 
-  // Verifying / result steps
   centred: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16, paddingHorizontal: 32 },
   matchingCircle: {
     width: 120, height: 120, borderRadius: 60, borderWidth: 2,
