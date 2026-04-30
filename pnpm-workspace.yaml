@@ -69,6 +69,7 @@ autoInstallPeers: false
 
 onlyBuiltDependencies:
   - '@swc/core'
+  - '@tensorflow/tfjs-node'
   - canvas
   - esbuild
   - msw

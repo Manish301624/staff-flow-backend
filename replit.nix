@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.util-linux
     pkgs.alsa-lib
     pkgs.cairo
     pkgs.pango

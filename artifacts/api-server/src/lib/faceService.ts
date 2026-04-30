@@ -1,38 +1,12 @@
 import path from "path";
-import { mkdirSync, existsSync, createWriteStream } from "fs";
-import { pipeline } from "stream/promises";
+import { createRequire } from "module";
 import { logger } from "./logger";
 
-const MODEL_DIR = path.join(process.cwd(), "models");
+const require = createRequire(import.meta.url);
 
-const MODEL_FILES = [
-  "tiny_face_detector_model-shard1",
-  "tiny_face_detector_model-weights_manifest.json",
-  "face_landmark_68_tiny_model-shard1",
-  "face_landmark_68_tiny_model-weights_manifest.json",
-  "face_recognition_model-shard1",
-  "face_recognition_model-shard2",
-  "face_recognition_model-weights_manifest.json",
-];
-
-const CDN =
-  "https://raw.githubusercontent.com/vladmandic/face-api/master/model";
-
-async function downloadModels(): Promise<void> {
-  mkdirSync(MODEL_DIR, { recursive: true });
-  for (const file of MODEL_FILES) {
-    const dest = path.join(MODEL_DIR, file);
-    if (existsSync(dest)) continue;
-    logger.info({ file }, "Downloading face model");
-    const resp = await fetch(`${CDN}/${file}`);
-    if (!resp.ok) {
-      throw new Error(`Failed to download model file ${file}: ${resp.status} ${resp.statusText}`);
-    }
-    const ws = createWriteStream(dest);
-    await pipeline(resp.body as unknown as NodeJS.ReadableStream, ws);
-    logger.info({ file }, "Model downloaded");
-  }
-}
+// Use the models bundled with @vladmandic/face-api — no download needed
+const FACE_API_PKG = require.resolve("@vladmandic/face-api/package.json");
+const MODEL_DIR = path.join(path.dirname(FACE_API_PKG), "model");
 
 let initialized = false;
 let initPromise: Promise<void> | null = null;
@@ -61,8 +35,6 @@ export async function initFaceService(): Promise<void> {
       Image: Image as unknown as typeof HTMLImageElement,
       ImageData: ImageData as unknown as typeof globalThis.ImageData,
     });
-
-    await downloadModels();
 
     await faceapi.nets.tinyFaceDetector.loadFromDisk(MODEL_DIR);
     await faceapi.nets.faceLandmark68TinyNet.loadFromDisk(MODEL_DIR);
