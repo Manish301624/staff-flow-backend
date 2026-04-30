@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator,
   Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform, Alert,
@@ -27,9 +28,16 @@ const METHOD_COLORS: Record<string, { color: string; bg: string }> = {
   bank: { color: "#2563EB", bg: "#DBEAFE" },
 };
 
+const STATUS_COLORS: Record<string, { color: string; bg: string }> = {
+  paid: { color: "#16A34A", bg: "#DCFCE7" },
+  pending: { color: "#D97706", bg: "#FEF3C7" },
+  cancelled: { color: "#DC2626", bg: "#FEE2E2" },
+};
+
 function PaymentRow({ payment, colors, onDelete }: { payment: any; colors: any; onDelete: (id: number) => void }) {
   const t = TYPE_COLORS[payment.type] ?? TYPE_COLORS.salary;
   const m = METHOD_COLORS[payment.method] ?? METHOD_COLORS.cash;
+  const st = STATUS_COLORS[payment.status] ?? STATUS_COLORS.pending;
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.cardHeader}>
@@ -44,6 +52,9 @@ function PaymentRow({ payment, colors, onDelete }: { payment: any; colors: any; 
             </View>
             <View style={[styles.badge, { backgroundColor: m.bg }]}>
               <Text style={[styles.badgeText, { color: m.color }]}>{payment.method}</Text>
+            </View>
+            <View style={[styles.badge, { backgroundColor: st.bg }]}>
+              <Text style={[styles.badgeText, { color: st.color }]}>{payment.status ?? "pending"}</Text>
             </View>
           </View>
         </View>
@@ -66,11 +77,17 @@ function PaymentRow({ payment, colors, onDelete }: { payment: any; colors: any; 
   );
 }
 
+const PAYMENT_STATUSES = [
+  { value: "paid", label: "Paid", color: "#16A34A", bg: "#DCFCE7" },
+  { value: "pending", label: "Pending", color: "#D97706", bg: "#FEF3C7" },
+];
+
 interface CreatePaymentForm {
   employeeId: number | null;
   amount: string;
   type: string;
   method: string;
+  status: string;
   month: string;
   year: string;
   note: string;
@@ -86,16 +103,21 @@ export default function PaymentsScreen() {
   const [showCreate, setShowCreate] = useState(false);
   const [showEmpPicker, setShowEmpPicker] = useState(false);
   const [form, setForm] = useState<CreatePaymentForm>({
-    employeeId: null, amount: "", type: "salary", method: "bank",
+    employeeId: null, amount: "", type: "salary", method: "bank", status: "paid",
     month: String(now.getMonth() + 1), year: String(now.getFullYear()), note: "",
   });
 
-  const { data: payments, isLoading, refetch } = useListPayments(
+  const queryClient = useQueryClient();
+  const { data: payments, isLoading } = useListPayments(
     showAll ? {} : { month: filterMonth, year: filterYear }
   );
   const { data: employees } = useListEmployees({});
   const createPayment = useCreatePayment();
   const deletePayment = useDeletePayment();
+
+  const invalidatePayments = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+  };
 
   const prevMonth = () => {
     if (filterMonth === 1) { setFilterMonth(12); setFilterYear(y => y - 1); }
@@ -113,7 +135,7 @@ export default function PaymentsScreen() {
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete", style: "destructive",
-        onPress: () => deletePayment.mutate({ id }, { onSuccess: () => refetch() }),
+        onPress: () => deletePayment.mutate({ id }, { onSuccess: () => invalidatePayments() }),
       },
     ]);
   };
@@ -135,6 +157,7 @@ export default function PaymentsScreen() {
           amount: amt,
           type: form.type,
           method: form.method,
+          status: form.status,
           month: form.month ? parseInt(form.month) : null,
           year: form.year ? parseInt(form.year) : null,
           note: form.note || null,
@@ -144,8 +167,8 @@ export default function PaymentsScreen() {
         onSuccess: () => {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setShowCreate(false);
-          setForm({ employeeId: null, amount: "", type: "salary", method: "bank", month: String(now.getMonth() + 1), year: String(now.getFullYear()), note: "" });
-          refetch();
+          setForm({ employeeId: null, amount: "", type: "salary", method: "bank", status: "paid", month: String(now.getMonth() + 1), year: String(now.getFullYear()), note: "" });
+          invalidatePayments();
         },
         onError: () => Alert.alert("Error", "Failed to add payment."),
       }
@@ -284,6 +307,25 @@ export default function PaymentsScreen() {
                 >
                   <Text style={[styles.optionBtnText, { color: form.method === m ? "#fff" : colors.foreground }]}>
                     {m.charAt(0).toUpperCase() + m.slice(1)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Status</Text>
+            <View style={[styles.optionRow, { marginBottom: 16 }]}>
+              {PAYMENT_STATUSES.map((s) => (
+                <Pressable
+                  key={s.value}
+                  style={[
+                    styles.optionBtn,
+                    { borderColor: colors.border },
+                    form.status === s.value && { backgroundColor: s.bg, borderColor: s.color },
+                  ]}
+                  onPress={() => setForm(f => ({ ...f, status: s.value }))}
+                >
+                  <Text style={[styles.optionBtnText, { color: form.status === s.value ? s.color : colors.foreground }]}>
+                    {s.label}
                   </Text>
                 </Pressable>
               ))}
