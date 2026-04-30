@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/mobile/"
+title = "StaffFlow Mobile"
+version = "1.0.0"
+id = "artifacts/staffflow-mobile"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/mobile/" ]
+localPort = 18489
+
+[services.development]
+run = "pnpm --filter @workspace/staffflow-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/staffflow-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/staffflow-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "18489"
+BASE_PATH = "/mobile/"

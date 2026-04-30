@@ -31,6 +31,7 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 ### Artifacts
 - `artifacts/api-server` — Express + PostgreSQL REST API (port 8080)
 - `artifacts/staffflow` — React + Vite frontend (port from $PORT)
+- `artifacts/staffflow-mobile` — Expo React Native app (preview path `/mobile/`)
 
 ### Features Built
 - JWT auth (bcryptjs, SESSION_SECRET), multi-tenant via companyId
@@ -55,9 +56,17 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - Orval auto-generates `*Params` types from query params — do NOT define them as schemas
 
 ### Auth
-- JWT stored in `localStorage` as `staffflow_token`
+- JWT stored in `localStorage` as `staffflow_token` (web) / `expo-secure-store` (native)
 - `setAuthTokenGetter` from `@workspace/api-client-react` injects bearer token
 - Demo: admin@staffflow.com / password123
+
+### Mobile App — StaffFlow Mobile (Expo SDK 54)
+- Stack: expo-router v6, @tanstack/react-query, shared `@workspace/api-client-react`
+- Auth: `contexts/AuthContext.tsx` — SecureStore on native, localStorage on web
+- Theme: Design tokens synced from web `index.css` (primary #576DFA, dark bg #060B18)
+- Tabs: Dashboard, Team, Attendance, Tasks, More
+- Platform: NativeTabs (iOS 18+ liquid glass) / BlurView tabs fallback
+- Base URL set via `EXPO_PUBLIC_DOMAIN` env var → `setBaseUrl()`
 
 ### Important Notes
 - `bcryptjs` (pure JS) used instead of native `bcrypt`
