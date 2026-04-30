@@ -78,7 +78,7 @@ export default function MoreScreen() {
         </View>
       </View>
 
-      {/* Section: HR */}
+      {/* HR Management */}
       <Text style={[styles.sectionHeader, { color: colors.mutedForeground }]}>HR MANAGEMENT</Text>
       <View style={styles.menuGroup}>
         <MenuItem
@@ -87,7 +87,7 @@ export default function MoreScreen() {
           sublabel="Calculate & manage salaries"
           iconBg="#DCFCE7"
           iconColor="#16A34A"
-          onPress={() => {}}
+          onPress={() => router.push("/salary")}
           colors={colors}
         />
         <MenuItem
@@ -96,7 +96,7 @@ export default function MoreScreen() {
           sublabel="Transaction history"
           iconBg="#DBEAFE"
           iconColor="#2563EB"
-          onPress={() => {}}
+          onPress={() => router.push("/payments")}
           colors={colors}
         />
         <MenuItem
@@ -105,26 +105,12 @@ export default function MoreScreen() {
           sublabel="Approve & manage leave requests"
           iconBg="#FEF3C7"
           iconColor="#D97706"
-          onPress={() => {}}
+          onPress={() => router.push("/leaves")}
           colors={colors}
         />
       </View>
 
-      {/* Section: Reports */}
-      <Text style={[styles.sectionHeader, { color: colors.mutedForeground }]}>ANALYTICS</Text>
-      <View style={styles.menuGroup}>
-        <MenuItem
-          icon="bar-chart-outline"
-          label="Monthly Reports"
-          sublabel="Payroll & attendance analytics"
-          iconBg="#EDE9FE"
-          iconColor="#7C3AED"
-          onPress={() => {}}
-          colors={colors}
-        />
-      </View>
-
-      {/* Section: Account */}
+      {/* Account */}
       <Text style={[styles.sectionHeader, { color: colors.mutedForeground }]}>ACCOUNT</Text>
       <View style={styles.menuGroup}>
         <MenuItem
@@ -133,7 +119,7 @@ export default function MoreScreen() {
           sublabel="Profile & preferences"
           iconBg={colors.muted}
           iconColor={colors.mutedForeground}
-          onPress={() => {}}
+          onPress={() => router.push("/settings")}
           colors={colors}
         />
         <Pressable
@@ -207,10 +193,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   menuGroup: {
-    borderRadius: 16,
-    overflow: "hidden",
     marginBottom: 24,
-    gap: 1,
+    gap: 6,
   },
   menuItem: {
     flexDirection: "row",
@@ -219,7 +203,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 14,
     gap: 14,
-    marginBottom: 6,
   },
   menuIcon: {
     width: 40,

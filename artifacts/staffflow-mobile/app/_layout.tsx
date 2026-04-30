@@ -64,6 +64,10 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="leaves" options={{ headerShown: true, animation: "slide_from_right", title: "Leaves" }} />
+      <Stack.Screen name="salary" options={{ headerShown: true, animation: "slide_from_right", title: "Salary & Payroll" }} />
+      <Stack.Screen name="payments" options={{ headerShown: true, animation: "slide_from_right", title: "Payments" }} />
+      <Stack.Screen name="settings" options={{ headerShown: true, animation: "slide_from_right", title: "Settings" }} />
     </Stack>
   );
 }

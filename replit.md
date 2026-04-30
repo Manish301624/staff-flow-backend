@@ -64,7 +64,10 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - Stack: Expo SDK 55, expo-router ~55.0.13, React Native 0.83.6, @tanstack/react-query, shared `@workspace/api-client-react`
 - Auth: `contexts/AuthContext.tsx` — SecureStore on native, localStorage on web
 - Theme: Design tokens synced from web `index.css` (primary #576DFA, dark bg #060B18)
-- Tabs: Dashboard, Team, Attendance, Tasks, More
+- Tabs: Dashboard, Team, Attendance, Tasks, More (hub)
+- Full-screen stack screens (push from More tab): Salary, Payments, Leaves, Settings
+- Feature parity with web: Leaves (create/approve/reject/delete + balances), Salary (monthly breakdown + mark paid), Payments (CRUD + month filter), Settings (profile/sign out)
+- CRUD in every tab: Employees (add/edit/delete + form modal), Tasks (create/delete + status toggle), Attendance (mark single/bulk + check-in/out times)
 - Platform: NativeTabs (iOS 18+ liquid glass) / BlurView tabs fallback
 - Base URL set via `EXPO_PUBLIC_DOMAIN` env var → `setBaseUrl()`
 - Metro config (`metro.config.js`): deduplicates React, React Native, @tanstack/react-query to prevent dual-instance context bugs
