@@ -101,7 +101,12 @@ router.get("/attendance", requireAuth, async (req, res): Promise<void> => {
 
   const employeeMap = new Map(adminEmployees.map(e => [e.id, e.name]));
 
-  res.json(filtered.map(a => ({
+  const sorted = [...filtered].sort((a, b) => {
+    if (b.date !== a.date) return b.date.localeCompare(a.date);
+    return (employeeMap.get(a.employeeId) ?? "").localeCompare(employeeMap.get(b.employeeId) ?? "");
+  });
+
+  res.json(sorted.map(a => ({
     ...a,
     employeeName: employeeMap.get(a.employeeId) || "Unknown",
     createdAt: a.createdAt.toISOString(),
