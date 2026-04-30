@@ -23,9 +23,27 @@ if (process.env.EXPO_PUBLIC_DOMAIN) {
   setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
 }
 
+function isAbortLike(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "AbortError" ||
+      error.message === "signal is aborted without reason" ||
+      error.message === "Aborted" ||
+      error.message === "The user aborted a request." ||
+      error.message === "The operation was aborted.")
+  );
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, staleTime: 30_000 },
+    queries: {
+      retry: 1,
+      staleTime: 30_000,
+      throwOnError: (err) => !isAbortLike(err),
+    },
+    mutations: {
+      throwOnError: (err) => !isAbortLike(err),
+    },
   },
 });
 

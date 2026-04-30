@@ -60,13 +60,18 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - `setAuthTokenGetter` from `@workspace/api-client-react` injects bearer token
 - Demo: admin@staffflow.com / password123
 
-### Mobile App — StaffFlow Mobile (Expo SDK 54)
-- Stack: expo-router v6, @tanstack/react-query, shared `@workspace/api-client-react`
+### Mobile App — StaffFlow Mobile (Expo SDK 55)
+- Stack: Expo SDK 55, expo-router ~55.0.13, React Native 0.83.6, @tanstack/react-query, shared `@workspace/api-client-react`
 - Auth: `contexts/AuthContext.tsx` — SecureStore on native, localStorage on web
 - Theme: Design tokens synced from web `index.css` (primary #576DFA, dark bg #060B18)
 - Tabs: Dashboard, Team, Attendance, Tasks, More
 - Platform: NativeTabs (iOS 18+ liquid glass) / BlurView tabs fallback
 - Base URL set via `EXPO_PUBLIC_DOMAIN` env var → `setBaseUrl()`
+- Metro config (`metro.config.js`): deduplicates React, React Native, @tanstack/react-query to prevent dual-instance context bugs
+- `@workspace/api-client-react` uses `peerDependencies` for `@tanstack/react-query` (NOT dependencies) — prevents duplicate installations
+- AbortError normalisation in `lib/api-client-react/src/custom-fetch.ts` — any polyfill abort becomes a proper `AbortError` so React Query silently cancels
+- `QueryClient` configured with `throwOnError` filter to suppress abort errors from reaching React error boundaries
+- Metro startup: `expo start --port $PORT --clear` WITHOUT `--localhost` flag (critical for Replit Expo proxy to reach Metro on 0.0.0.0)
 
 ### Important Notes
 - `bcryptjs` (pure JS) used instead of native `bcrypt`

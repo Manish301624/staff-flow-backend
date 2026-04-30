@@ -322,6 +322,25 @@ async function parseSuccessBody(
   }
 }
 
+function isAbortError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.name === "AbortError" ||
+    error.message === "signal is aborted without reason" ||
+    error.message === "Aborted" ||
+    error.message === "The user aborted a request."
+  );
+}
+
+function makeAbortError(): Error {
+  if (typeof DOMException !== "undefined") {
+    return new DOMException("The operation was aborted.", "AbortError");
+  }
+  const err = new Error("The operation was aborted.");
+  (err as Error & { name: string }).name = "AbortError";
+  return err;
+}
+
 export async function customFetch<T = unknown>(
   input: RequestInfo | URL,
   options: CustomFetchOptions = {},
@@ -360,7 +379,17 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  let response: Response;
+  try {
+    response = await fetch(input, { ...init, method, headers });
+  } catch (error) {
+    // Normalise abort errors from any fetch polyfill into a proper AbortError
+    // so that React Query v5 recognises them as cancellations, not failures.
+    if (init.signal?.aborted || isAbortError(error)) {
+      throw makeAbortError();
+    }
+    throw error;
+  }
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
