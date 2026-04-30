@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator,
-  Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform, Alert,
+  Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform,
 } from "react-native";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -102,6 +103,7 @@ export default function PaymentsScreen() {
   const [showAll, setShowAll] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [showEmpPicker, setShowEmpPicker] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [form, setForm] = useState<CreatePaymentForm>({
     employeeId: null, amount: "", type: "salary", method: "bank", status: "paid",
     month: String(now.getMonth() + 1), year: String(now.getFullYear()), note: "",
@@ -131,13 +133,7 @@ export default function PaymentsScreen() {
   };
 
   const handleDelete = (id: number) => {
-    Alert.alert("Delete Payment", "Remove this payment record?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete", style: "destructive",
-        onPress: () => deletePayment.mutate({ id }, { onSuccess: () => invalidatePayments() }),
-      },
-    ]);
+    setConfirmDeleteId(id);
   };
 
   const handleCreate = () => {
@@ -412,6 +408,18 @@ export default function PaymentsScreen() {
           />
         </View>
       </Modal>
+      <ConfirmModal
+        visible={confirmDeleteId !== null}
+        title="Delete Payment"
+        message="Remove this payment record? This cannot be undone."
+        confirmLabel="Delete"
+        onCancel={() => setConfirmDeleteId(null)}
+        onConfirm={() => {
+          if (confirmDeleteId !== null) {
+            deletePayment.mutate({ id: confirmDeleteId }, { onSuccess: () => { setConfirmDeleteId(null); invalidatePayments(); } });
+          }
+        }}
+      />
     </View>
   );
 }

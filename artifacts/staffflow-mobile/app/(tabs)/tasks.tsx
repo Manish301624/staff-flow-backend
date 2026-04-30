@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator,
   Platform, Modal, ScrollView, KeyboardAvoidingView, TextInput, Alert,
 } from "react-native";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -106,6 +107,7 @@ export default function TasksScreen() {
   const createTask = useCreateTask();
   const deleteTask = useDeleteTask();
   const { data: employees } = useListEmployees({});
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   const topPadding = Platform.OS === "web" ? 67 : 0;
 
@@ -116,13 +118,7 @@ export default function TasksScreen() {
   };
 
   const handleDelete = (id: number) => {
-    Alert.alert("Delete Task", "Remove this task permanently?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete", style: "destructive",
-        onPress: () => deleteTask.mutate({ id }, { onSuccess: () => refetch() }),
-      },
-    ]);
+    setConfirmDeleteId(id);
   };
 
   const handleCreate = () => {
@@ -327,6 +323,18 @@ export default function TasksScreen() {
           />
         </View>
       </Modal>
+      <ConfirmModal
+        visible={confirmDeleteId !== null}
+        title="Delete Task"
+        message="Remove this task permanently? This cannot be undone."
+        confirmLabel="Delete"
+        onCancel={() => setConfirmDeleteId(null)}
+        onConfirm={() => {
+          if (confirmDeleteId !== null) {
+            deleteTask.mutate({ id: confirmDeleteId }, { onSuccess: () => { setConfirmDeleteId(null); refetch(); } });
+          }
+        }}
+      />
     </View>
   );
 }

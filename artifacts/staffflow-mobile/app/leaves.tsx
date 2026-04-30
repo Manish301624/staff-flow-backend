@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator,
   Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform, Alert,
 } from "react-native";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -127,6 +128,7 @@ export default function LeavesScreen() {
   const approveLeave = useApproveLeave();
   const rejectLeave = useRejectLeave();
   const deleteLeave = useDeleteLeave();
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   const handleApprove = (id: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -139,14 +141,7 @@ export default function LeavesScreen() {
   };
 
   const handleDelete = (id: number) => {
-    Alert.alert("Delete Leave", "Remove this leave request?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => deleteLeave.mutate({ id }, { onSuccess: () => refetch() }),
-      },
-    ]);
+    setConfirmDeleteId(id);
   };
 
   const handleCreate = () => {
@@ -372,6 +367,18 @@ export default function LeavesScreen() {
           />
         </View>
       </Modal>
+      <ConfirmModal
+        visible={confirmDeleteId !== null}
+        title="Delete Leave"
+        message="Remove this leave request? This cannot be undone."
+        confirmLabel="Delete"
+        onCancel={() => setConfirmDeleteId(null)}
+        onConfirm={() => {
+          if (confirmDeleteId !== null) {
+            deleteLeave.mutate({ id: confirmDeleteId }, { onSuccess: () => { setConfirmDeleteId(null); refetch(); } });
+          }
+        }}
+      />
     </View>
   );
 }

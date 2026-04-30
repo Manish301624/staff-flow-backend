@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Platform, Modal, ScrollView,
   KeyboardAvoidingView, Alert,
 } from "react-native";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -79,6 +80,7 @@ export default function EmployeesScreen() {
   const createEmployee = useCreateEmployee();
   const updateEmployee = useUpdateEmployee();
   const deleteEmployee = useDeleteEmployee();
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   const topPadding = Platform.OS === "web" ? 67 : 0;
 
@@ -102,17 +104,7 @@ export default function EmployeesScreen() {
   };
 
   const handleDelete = (id: number) => {
-    Alert.alert("Delete Employee", "This will permanently remove the employee.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => deleteEmployee.mutate({ id }, {
-          onSuccess: () => refetch(),
-          onError: () => Alert.alert("Error", "Could not delete employee."),
-        }),
-      },
-    ]);
+    setConfirmDeleteId(id);
   };
 
   const handleSave = () => {
@@ -309,6 +301,18 @@ export default function EmployeesScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
+      <ConfirmModal
+        visible={confirmDeleteId !== null}
+        title="Delete Employee"
+        message="This will permanently remove the employee and all their records."
+        confirmLabel="Delete"
+        onCancel={() => setConfirmDeleteId(null)}
+        onConfirm={() => {
+          if (confirmDeleteId !== null) {
+            deleteEmployee.mutate({ id: confirmDeleteId }, { onSuccess: () => { setConfirmDeleteId(null); refetch(); } });
+          }
+        }}
+      />
     </View>
   );
 }
