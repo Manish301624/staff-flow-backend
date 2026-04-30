@@ -14,9 +14,14 @@
       "backgroundColor": "#060B18"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "StaffFlow needs camera access to verify employee identity for attendance."
+      }
     },
-    "android": {},
+    "android": {
+      "permissions": ["android.permission.CAMERA"]
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
@@ -29,7 +34,14 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "StaffFlow needs camera access to verify employee identity for attendance.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

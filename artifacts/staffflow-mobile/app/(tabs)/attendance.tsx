@@ -12,6 +12,7 @@ import {
   useListAttendance, useGetAttendanceSummary, useMarkAttendance,
   useListEmployees,
 } from "@workspace/api-client-react";
+import { FaceAttendanceModal } from "@/components/FaceAttendanceModal";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -85,6 +86,7 @@ export default function AttendanceScreen() {
   });
   const [markAll, setMarkAll] = useState(false);
   const [bulkStatus, setBulkStatus] = useState("present");
+  const [showFaceModal, setShowFaceModal] = useState(false);
 
   const queryClient = useQueryClient();
   const { data: attendance, isLoading } = useListAttendance({ month, year });
@@ -95,6 +97,17 @@ export default function AttendanceScreen() {
   const invalidateAttendance = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/attendance"] });
     queryClient.invalidateQueries({ queryKey: ["/api/attendance/summary"] });
+  };
+
+  const handleFaceSubmit = (employeeId: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const now = new Date();
+      const checkIn = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      markAttendance.mutate(
+        { data: { records: [{ employeeId, date: todayStr(), status: "present", checkIn, checkOut: null }] } },
+        { onSuccess: () => { invalidateAttendance(); resolve(); }, onError: reject }
+      );
+    });
   };
 
   const topPadding = Platform.OS === "web" ? 67 : 0;
@@ -172,13 +185,22 @@ export default function AttendanceScreen() {
         <Pressable onPress={nextMonth} style={styles.navBtn}>
           <Ionicons name="chevron-forward" size={22} color={colors.foreground} />
         </Pressable>
-        <Pressable
-          style={[styles.markBtn, { backgroundColor: colors.primary }]}
-          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowMarkModal(true); }}
-        >
-          <Ionicons name="add" size={16} color="#fff" />
-          <Text style={styles.markBtnText}>Mark</Text>
-        </Pressable>
+        <View style={styles.headerBtns}>
+          <Pressable
+            style={[styles.scanBtn, { backgroundColor: "#16A34A" }]}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowFaceModal(true); }}
+          >
+            <Ionicons name="scan" size={15} color="#fff" />
+            <Text style={styles.markBtnText}>Scan</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.markBtn, { backgroundColor: colors.primary }]}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowMarkModal(true); }}
+          >
+            <Ionicons name="add" size={16} color="#fff" />
+            <Text style={styles.markBtnText}>Mark</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Summary chips */}
@@ -332,6 +354,15 @@ export default function AttendanceScreen() {
         </ScrollView>
       </Modal>
 
+      {/* Face Attendance Modal */}
+      <FaceAttendanceModal
+        visible={showFaceModal}
+        employees={(employees ?? []) as { id: number; name: string; role: string; department?: string | null }[]}
+        onClose={() => setShowFaceModal(false)}
+        onSuccess={() => setShowFaceModal(false)}
+        onSubmit={handleFaceSubmit}
+      />
+
       {/* Employee Picker */}
       <Modal visible={showEmpPicker} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowEmpPicker(false)}>
         <View style={[styles.modalRoot, { backgroundColor: colors.background }]}>
@@ -375,6 +406,11 @@ const styles = StyleSheet.create({
   },
   navBtn: { padding: 6 },
   monthLabel: { flex: 1, textAlign: "center", fontSize: 17, fontFamily: "Inter_700Bold" },
+  headerBtns: { flexDirection: "row", gap: 8 },
+  scanBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7,
+  },
   markBtn: {
     flexDirection: "row", alignItems: "center", gap: 4,
     borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7,
