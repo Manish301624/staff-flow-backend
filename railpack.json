@@ -3,7 +3,7 @@
     "startCommand": "node --enable-source-maps ./artifacts/api-server/dist/index.mjs"
   },
   "build": {
-    "buildCommand": "pnpm install --no-frozen-lockfile --ignore-scripts && cd artifacts/api-server && pnpm run build"
+    "buildCommand": "cd artifacts/api-server && pnpm run build"
   },
   "install": {
     "installCommand": "pnpm install --no-frozen-lockfile --ignore-scripts"
