@@ -15,6 +15,17 @@ import {
 } from "@workspace/api-client-react";
 import { FaceAttendanceModal } from "@/components/FaceAttendanceModal";
 
+function formatDisplayTime(time: string): string {
+  if (!time) return "";
+  if (time.includes("AM") || time.includes("PM")) return time;
+  const [hourStr, minuteStr] = time.split(":");
+  const hour = parseInt(hourStr);
+  const minutes = minuteStr?.slice(0, 2) || "00";
+  const ampm = hour >= 12 ? "PM" : "AM";
+  const hours12 = hour % 12 || 12;
+  return `${String(hours12).padStart(2, "0")}:${minutes} ${ampm}`;
+}
+
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 const STATUSES = [
@@ -51,8 +62,8 @@ function AttendanceRow({ record, colors, onCheckout }: { record: any; colors: an
         <Text style={[styles.rowName, { color: colors.foreground }]} numberOfLines={1}>{record.employeeName}</Text>
         <Text style={[styles.rowDate, { color: colors.mutedForeground }]}>
           {new Date(record.date).toLocaleDateString("en", { day: "numeric", month: "short" })}
-          {record.checkIn ? `  •  In: ${record.checkIn}` : ""}
-          {record.checkOut ? `  •  Out: ${record.checkOut}` : ""}
+          {record.checkIn ? `  •  In: ${formatDisplayTime(record.checkIn)}` : ""}
+          {record.checkOut ? `  •  Out: ${formatDisplayTime(record.checkOut)}` : ""}
         </Text>
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -195,7 +206,8 @@ export default function AttendanceScreen() {
         onSuccess: () => {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setShowMarkModal(false);
-         setMarkForm({ employeeId: null, date: todayStr(), status: "present", checkIn: new Date().toTimeString().slice(0,5), checkOut: "" });
+         const n = new Date(); const h = n.getHours(); const m = String(n.getMinutes()).padStart(2,"0");
+         setMarkForm({ employeeId: null, date: todayStr(), status: "present", checkIn: `${String(h%12||12).padStart(2,"0")}:${m} ${h>=12?"PM":"AM"}`, checkOut: "" });
           invalidateAttendance();
         },
         onError: () => Alert.alert("Error", "Failed to mark attendance."),
