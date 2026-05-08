@@ -20,7 +20,12 @@
       }
     },
     "android": {
-      "permissions": ["android.permission.CAMERA"]
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "usesCleartextTraffic": true,
+      "package": "com.allegient.staffflowmobile"
     },
     "web": {
       "favicon": "./assets/images/icon.png"
@@ -46,6 +51,11 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c824bc5b-1b03-4166-b810-b71a1d2cbe7c"
+      }
     }
   }
 }

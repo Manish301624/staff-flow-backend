@@ -4,17 +4,22 @@ import { Ionicons } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGetDashboardStats, useGetSmartInsights, useGetAttendanceTrend } from "@workspace/api-client-react";
+import { useRouter } from "expo-router";
+import { Pressable } from "react-native";
 
-function StatCard({ label, value, icon, color, bg }: { label: string; value: string | number; icon: string; color: string; bg: string }) {
+function StatCard({ label, value, icon, color, bg, onPress }: { label: string; value: string | number; icon: string; color: string; bg: string; onPress?: () => void }) {
   const colors = useColors();
   return (
-    <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <Pressable
+      onPress={onPress}
+      style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+    >
       <View style={[styles.statIcon, { backgroundColor: bg }]}>
         <Ionicons name={icon as any} size={20} color={color} />
       </View>
       <Text style={[styles.statValue, { color: colors.foreground }]}>{value}</Text>
       <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>{label}</Text>
-    </View>
+    </Pressable>
   );
 }
 
@@ -35,6 +40,7 @@ export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const router = useRouter();
 
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useGetDashboardStats();
   const { data: insights, isLoading: insightsLoading } = useGetSmartInsights();
@@ -84,6 +90,7 @@ export default function DashboardScreen() {
           icon="people"
           color="#576DFA"
           bg="#EDECFE"
+          onPress={() => router.push("/(tabs)/employees")}
         />
         <StatCard
           label="Present Today"
@@ -91,6 +98,7 @@ export default function DashboardScreen() {
           icon="checkmark-circle"
           color="#22C55E"
           bg="#DCFCE7"
+          onPress={() => router.push("/(tabs)/attendance")}
         />
         <StatCard
           label="Pending Leaves"
@@ -98,6 +106,7 @@ export default function DashboardScreen() {
           icon="time"
           color="#F59E0B"
           bg="#FEF3C7"
+          onPress={() => router.push("/leaves")}
         />
         <StatCard
           label="Active Tasks"
@@ -105,6 +114,7 @@ export default function DashboardScreen() {
           icon="list"
           color="#38BDF8"
           bg="#E0F2FE"
+          onPress={() => router.push("/(tabs)/tasks")}
         />
       </View>
 

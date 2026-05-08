@@ -19,8 +19,12 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 
 SplashScreen.preventAutoHideAsync();
 
-if (process.env.EXPO_PUBLIC_DOMAIN) {
-  setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
+const domain = process.env.EXPO_PUBLIC_DOMAIN;
+console.log("API Domain:", domain);
+if (domain) {
+  setBaseUrl(`http://${domain}`);
+} else {
+  setBaseUrl(`http://10.0.2.2:3000`);
 }
 
 function isAbortLike(error: unknown): boolean {

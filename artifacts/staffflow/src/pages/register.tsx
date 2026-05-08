@@ -77,7 +77,7 @@ export default function RegisterPage() {
             <Label htmlFor="company">Company name</Label>
             <div className="relative">
               <Building2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input id="company" className="pl-9" placeholder="TechCo Pvt Ltd" data-testid="input-company" {...register("companyName")} />
+              <Input id="company" className="pl-9" placeholder="Allegient Unified Technology Pvt. Ltd" data-testid="input-company" {...register("companyName")} />
             </div>
             {errors.companyName && <p className="text-xs text-destructive">{errors.companyName.message}</p>}
           </div>

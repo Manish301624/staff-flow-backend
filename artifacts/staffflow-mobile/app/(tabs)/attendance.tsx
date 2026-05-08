@@ -32,7 +32,7 @@ function SummaryChip({ label, count, color, bg }: { label: string; count: number
   );
 }
 
-function AttendanceRow({ record, colors }: { record: any; colors: any }) {
+function AttendanceRow({ record, colors, onCheckout }: { record: any; colors: any; onCheckout: (record: any) => void }) {
   const statusMap: Record<string, { label: string; color: string; bg: string; icon: string }> = {
     present: { label: "Present", color: "#16A34A", bg: "#DCFCE7", icon: "checkmark-circle" },
     absent: { label: "Absent", color: "#DC2626", bg: "#FEE2E2", icon: "close-circle" },
@@ -52,16 +52,27 @@ function AttendanceRow({ record, colors }: { record: any; colors: any }) {
         <Text style={[styles.rowDate, { color: colors.mutedForeground }]}>
           {new Date(record.date).toLocaleDateString("en", { day: "numeric", month: "short" })}
           {record.checkIn ? `  •  In: ${record.checkIn}` : ""}
+          {record.checkOut ? `  •  Out: ${record.checkOut}` : ""}
         </Text>
       </View>
-      <View style={[styles.rowBadge, { backgroundColor: s.bg }]}>
-        <Ionicons name={s.icon as any} size={14} color={s.color} />
-        <Text style={[styles.rowBadgeText, { color: s.color }]}>{s.label}</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        {record.status === "present" && record.checkIn && !record.checkOut && (
+          <Pressable
+            style={[styles.rowBadge, { backgroundColor: "#DBEAFE" }]}
+            onPress={() => onCheckout(record)}
+          >
+            <Ionicons name="log-out-outline" size={14} color="#2563EB" />
+            <Text style={[styles.rowBadgeText, { color: "#2563EB" }]}>Out</Text>
+          </Pressable>
+        )}
+        <View style={[styles.rowBadge, { backgroundColor: s.bg }]}>
+          <Ionicons name={s.icon as any} size={14} color={s.color} />
+          <Text style={[styles.rowBadgeText, { color: s.color }]}>{s.label}</Text>
+        </View>
       </View>
     </View>
   );
 }
-
 interface MarkForm {
   employeeId: number | null;
   date: string;
@@ -83,7 +94,7 @@ export default function AttendanceScreen() {
   const [showMarkModal, setShowMarkModal] = useState(false);
   const [showEmpPicker, setShowEmpPicker] = useState(false);
   const [markForm, setMarkForm] = useState<MarkForm>({
-    employeeId: null, date: todayStr(), status: "present", checkIn: "", checkOut: "",
+   employeeId: null, date: todayStr(), status: "present", checkIn: (() => { const n = new Date(); const h = n.getHours(); const m = String(n.getMinutes()).padStart(2,"0"); return `${String(h%12||12).padStart(2,"0")}:${m} ${h>=12?"PM":"AM"}`; })(), checkOut: "",
   });
   const [markAll, setMarkAll] = useState(false);
   const [bulkStatus, setBulkStatus] = useState("present");
@@ -100,11 +111,31 @@ export default function AttendanceScreen() {
     queryClient.invalidateQueries({ queryKey: ["/api/attendance"] });
     queryClient.invalidateQueries({ queryKey: ["/api/attendance/summary"] });
   };
+    const handleCheckout = (record: any) => {
+      const now = new Date();
+     const hours = now.getHours();
+     const minutes = String(now.getMinutes()).padStart(2, "0");
+     const ampm = hours >= 12 ? "PM" : "AM";
+     const hours12 = hours % 12 || 12;
+     const checkOut = `${String(hours12).padStart(2, "0")}:${minutes} ${ampm}`;
+      setMarkForm({
+        employeeId: record.employeeId,
+        date: record.date,
+        status: "present",
+        checkIn: record.checkIn || "",  // keep existing checkIn!
+        checkOut: checkOut,             // set current time as checkout
+      });
+      setShowMarkModal(true);
+    };
 
   const handleFaceSubmit = (employeeId: number): Promise<void> => {
     return new Promise((resolve, reject) => {
       const now = new Date();
-      const checkIn = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+     const hours = now.getHours();
+     const minutes = String(now.getMinutes()).padStart(2, "0");
+     const ampm = hours >= 12 ? "PM" : "AM";
+     const hours12 = hours % 12 || 12;
+     const checkIn = `${String(hours12).padStart(2, "0")}:${minutes} ${ampm}`;
       markAttendance.mutate(
         { data: { records: [{ employeeId, date: todayStr(), status: "present", checkIn, checkOut: null }] } },
         { onSuccess: () => { invalidateAttendance(); resolve(); }, onError: reject }
@@ -164,7 +195,7 @@ export default function AttendanceScreen() {
         onSuccess: () => {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setShowMarkModal(false);
-          setMarkForm({ employeeId: null, date: todayStr(), status: "present", checkIn: "", checkOut: "" });
+         setMarkForm({ employeeId: null, date: todayStr(), status: "present", checkIn: new Date().toTimeString().slice(0,5), checkOut: "" });
           invalidateAttendance();
         },
         onError: () => Alert.alert("Error", "Failed to mark attendance."),
@@ -188,13 +219,13 @@ export default function AttendanceScreen() {
           <Ionicons name="chevron-forward" size={22} color={colors.foreground} />
         </Pressable>
         <View style={styles.headerBtns}>
-          <Pressable
-            style={[styles.scanBtn, { backgroundColor: "#16A34A" }]}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowFaceModal(true); }}
-          >
-            <Ionicons name="scan" size={15} color="#fff" />
-            <Text style={styles.markBtnText}>Scan</Text>
-          </Pressable>
+            <Pressable
+              style={[styles.scanBtn, { backgroundColor: "#16A34A" }]}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowFaceModal(true); }}
+            >
+              <Ionicons name="scan" size={15} color="#fff" />
+              <Text style={styles.markBtnText}>Scan</Text>
+            </Pressable>
           <Pressable
             style={[styles.markBtn, { backgroundColor: colors.primary }]}
             onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowMarkModal(true); }}
@@ -220,7 +251,7 @@ export default function AttendanceScreen() {
         <FlatList
           data={attendance ?? []}
           keyExtractor={(r) => String(r.id)}
-          renderItem={({ item }) => <AttendanceRow record={item} colors={colors} />}
+          renderItem={({ item }) => <AttendanceRow record={item} colors={colors} onCheckout={handleCheckout} />}
           contentContainerStyle={[
             styles.list,
             { paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 100) },
