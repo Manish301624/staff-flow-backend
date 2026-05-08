@@ -1,0 +1,8 @@
+{
+  "deploy": {
+    "startCommand": "node --enable-source-maps ./artifacts/api-server/dist/index.mjs"
+  },
+  "build": {
+    "buildCommand": "pnpm install --ignore-scripts && cd artifacts/api-server && pnpm run build"
+  }
+}
