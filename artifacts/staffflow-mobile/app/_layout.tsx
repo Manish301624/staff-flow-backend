@@ -22,7 +22,7 @@ SplashScreen.preventAutoHideAsync();
 const domain = process.env.EXPO_PUBLIC_DOMAIN;
 console.log("API Domain:", domain);
 if (domain) {
-  setBaseUrl(`http://${domain}`);
+  setBaseUrl(`https://${domain}`);
 } else {
   setBaseUrl(`http://10.0.2.2:3000`);
 }

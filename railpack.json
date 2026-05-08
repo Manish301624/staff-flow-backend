@@ -6,6 +6,6 @@
     "buildCommand": "cd artifacts/api-server && pnpm run build"
   },
   "install": {
-    "installCommand": "pnpm install --no-frozen-lockfile --ignore-scripts"
+    "installCommand": "pnpm install --no-frozen-lockfile"
   }
 }
