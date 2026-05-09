@@ -167,6 +167,33 @@ router.post("/attendance", requireAuth, async (req, res): Promise<void> => {
       employeeName: employeeMap.get(att.employeeId) || "Unknown",
       createdAt: att.createdAt.toISOString(),
     });
+
+   // ← ADD EMAIL CODE HERE ↓
+       try {
+         const [admin] = await db.select().from(usersTable).where(eq(usersTable.id, adminId));
+         if (admin?.email) {
+           if (att.checkIn && !att.checkOut) {
+             await sendAttendanceEmail({
+               adminEmail: admin.email,
+               employeeName: employeeMap.get(att.employeeId) || "Employee",
+               type: "check_in",
+               time: att.checkIn,
+               date: att.date,
+             });
+           } else if (att.checkOut) {
+             await sendAttendanceEmail({
+               adminEmail: admin.email,
+               employeeName: employeeMap.get(att.employeeId) || "Employee",
+               type: "check_out",
+               time: att.checkOut,
+               date: att.date,
+             });
+           }
+         }
+       } catch (err) {
+         console.log("Email notification failed:", err);
+       }
+       // ← EMAIL CODE ENDS HERE
   }
 
   res.json(results);

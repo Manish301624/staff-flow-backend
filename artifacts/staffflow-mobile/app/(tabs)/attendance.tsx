@@ -13,6 +13,8 @@ import {
   useListAttendance, useGetAttendanceSummary, useMarkAttendance,
   useListEmployees,
 } from "@workspace/api-client-react";
+import { sendAttendanceEmail } from "../lib/emailService";
+import { usersTable } from "@workspace/db";
 import { FaceAttendanceModal } from "@/components/FaceAttendanceModal";
 
 function formatDisplayTime(time: string): string {
