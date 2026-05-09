@@ -228,6 +228,32 @@ router.patch("/attendance/:id", requireAuth, async (req, res): Promise<void> => 
   const adminEmployees = await db.select().from(employeesTable).where(eq(employeesTable.adminId, adminId));
   const employeeMap = new Map(adminEmployees.map(e => [e.id, e.name]));
 
+// Send email notification
+  try {
+    const [admin] = await db.select().from(usersTable).where(eq(usersTable.id, adminId));
+    if (admin?.email) {
+      if (att.checkIn && !att.checkOut) {
+        await sendAttendanceEmail({
+          adminEmail: process.env.ADMIN_EMAIL || admin.email,
+          employeeName: employeeMap.get(att.employeeId) || "Employee",
+          type: "check_in",
+          time: att.checkIn,
+          date: att.date,
+        });
+      } else if (att.checkOut) {
+        await sendAttendanceEmail({
+          adminEmail: process.env.ADMIN_EMAIL || admin.email,
+          employeeName: employeeMap.get(att.employeeId) || "Employee",
+          type: "check_out",
+          time: att.checkOut,
+          date: att.date,
+        });
+      }
+    }
+  } catch (err) {
+    console.log("Email notification failed patch:", err);
+  }
+
   res.json({
     ...att,
     employeeName: employeeMap.get(att.employeeId) || "Unknown",
