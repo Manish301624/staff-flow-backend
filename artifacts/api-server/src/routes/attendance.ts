@@ -172,6 +172,7 @@ router.post("/attendance", requireAuth, async (req, res): Promise<void> => {
    // ← ADD EMAIL CODE HERE ↓
        try {
          const [admin] = await db.select().from(usersTable).where(eq(usersTable.id, adminId));
+         console.log("Email debug:", { adminEmail: admin?.email, checkIn: att.checkIn, checkOut: att.checkOut });
          if (admin?.email) {
            if (att.checkIn && !att.checkOut) {
              await sendAttendanceEmail({
