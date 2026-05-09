@@ -1,15 +1,6 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  family: 4, // Force IPv4
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendAttendanceEmail({
   adminEmail,
@@ -32,8 +23,8 @@ export async function sendAttendanceEmail({
     ? `${employeeName} has checked in at ${time} on ${date}.`
     : `${employeeName} has checked out at ${time} on ${date}.`;
 
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+  await resend.emails.send({
+    from: "StaffFlow <onboarding@resend.dev>",
     to: adminEmail,
     subject,
     html: `
