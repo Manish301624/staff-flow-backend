@@ -176,7 +176,7 @@ router.post("/attendance", requireAuth, async (req, res): Promise<void> => {
          if (admin?.email) {
            if (att.checkIn && !att.checkOut) {
              await sendAttendanceEmail({
-               adminEmail: admin.email,
+              adminEmail: process.env.ADMIN_EMAIL || admin.email,
                employeeName: employeeMap.get(att.employeeId) || "Employee",
                type: "check_in",
                time: att.checkIn,
@@ -184,7 +184,7 @@ router.post("/attendance", requireAuth, async (req, res): Promise<void> => {
              });
            } else if (att.checkOut) {
              await sendAttendanceEmail({
-               adminEmail: admin.email,
+               adminEmail: process.env.ADMIN_EMAIL || admin.email,
                employeeName: employeeMap.get(att.employeeId) || "Employee",
                type: "check_out",
                time: att.checkOut,
