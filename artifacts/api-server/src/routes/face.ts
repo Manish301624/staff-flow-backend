@@ -281,6 +281,22 @@ router.post(
       req.log.info({ employeeId, attendanceId, checkIn }, "Check-in recorded (new record)");
     }
 
+// Send email notification
+try {
+  const [admin] = await db.select().from(usersTable).where(eq(usersTable.id, adminId));
+  if (admin?.email && action !== "already_checked_out") {
+    await sendAttendanceEmail({
+      adminEmail: process.env.ADMIN_EMAIL || admin.email,
+      employeeName: employee.name,
+      type: action === "check_in" ? "check_in" : "check_out",
+      time: action === "check_in" ? checkIn! : checkOut!,
+      date: today,
+    });
+  }
+} catch (err) {
+  console.log("Email notification failed face:", err);
+}
+
     res.json({
       matched: true,
       matchScore,

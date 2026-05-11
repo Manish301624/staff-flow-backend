@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { db, attendanceTable, employeesTable, usersTable } from "@workspace/db";
+import { sendAttendanceEmail } from "../lib/emailService";
 import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
-import { sendAttendanceEmail } from "../lib/emailService";
+
 import {
   MarkAttendanceBody,
   UpdateAttendanceBody,
