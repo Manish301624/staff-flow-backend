@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { db, employeesTable } from "@workspace/db";
-import { eq, and, ilike, or } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import {
   CreateEmployeeBody,
   UpdateEmployeeBody,
@@ -35,6 +37,7 @@ router.get("/employees", requireAuth, async (req, res): Promise<void> => {
     ...e,
     salary: Number(e.salary),
     createdAt: e.createdAt.toISOString(),
+    passwordHash: undefined, // never expose password
   })));
 });
 
@@ -46,16 +49,25 @@ router.post("/employees", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
+  const { password, ...employeeData } = parsed.data as any;
+
+  let passwordHash = null;
+  if (password) {
+    passwordHash = await bcrypt.hash(password, 10);
+  }
+
   const [employee] = await db.insert(employeesTable).values({
-    ...parsed.data,
+    ...employeeData,
     adminId,
-    salary: String(parsed.data.salary),
+    salary: String(employeeData.salary),
+    passwordHash,
   }).returning();
 
   res.status(201).json({
     ...employee,
     salary: Number(employee.salary),
     createdAt: employee.createdAt.toISOString(),
+    passwordHash: undefined,
   });
 });
 
@@ -78,6 +90,7 @@ router.get("/employees/:id", requireAuth, async (req, res): Promise<void> => {
     ...employee,
     salary: Number(employee.salary),
     createdAt: employee.createdAt.toISOString(),
+    passwordHash: undefined,
   });
 });
 
@@ -95,9 +108,16 @@ router.patch("/employees/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const updateData: any = { ...parsed.data };
+  const { password, ...restData } = parsed.data as any;
+  const updateData: any = { ...restData };
+
   if (updateData.salary !== undefined) {
     updateData.salary = String(updateData.salary);
+  }
+
+  // Only admin can change password
+  if (password) {
+    updateData.passwordHash = await bcrypt.hash(password, 10);
   }
 
   const [employee] = await db.update(employeesTable)
@@ -114,7 +134,34 @@ router.patch("/employees/:id", requireAuth, async (req, res): Promise<void> => {
     ...employee,
     salary: Number(employee.salary),
     createdAt: employee.createdAt.toISOString(),
+    passwordHash: undefined,
   });
+});
+
+// Change password — admin only
+router.patch("/employees/:id/change-password", requireAuth, async (req, res): Promise<void> => {
+  const { adminId } = (req as any).user;
+  const id = parseInt(req.params.id);
+  const { password } = req.body;
+
+  if (!password || password.length < 6) {
+    res.status(400).json({ error: "Password must be at least 6 characters" });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  const [employee] = await db.update(employeesTable)
+    .set({ passwordHash })
+    .where(and(eq(employeesTable.id, id), eq(employeesTable.adminId, adminId)))
+    .returning();
+
+  if (!employee) {
+    res.status(404).json({ error: "Employee not found" });
+    return;
+  }
+
+  res.json({ success: true, message: "Password updated successfully" });
 });
 
 router.delete("/employees/:id", requireAuth, async (req, res): Promise<void> => {
@@ -135,6 +182,53 @@ router.delete("/employees/:id", requireAuth, async (req, res): Promise<void> => 
   }
 
   res.sendStatus(204);
+});
+
+// Employee self-login
+router.post("/auth/employee-login", async (req, res): Promise<void> => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    res.status(400).json({ error: "Email and password required" });
+    return;
+  }
+
+  const [employee] = await db.select().from(employeesTable)
+    .where(eq(employeesTable.email, email));
+
+  if (!employee || !employee.passwordHash) {
+    res.status(401).json({ error: "Invalid credentials" });
+    return;
+  }
+
+  const valid = await bcrypt.compare(password, employee.passwordHash);
+  if (!valid) {
+    res.status(401).json({ error: "Invalid credentials" });
+    return;
+  }
+
+  const token = jwt.sign(
+    {
+      employeeId: employee.id,
+      adminId: employee.adminId,
+      role: "employee",
+      email: employee.email,
+    },
+    process.env.JWT_SECRET!,
+    { expiresIn: "30d" }
+  );
+
+  res.json({
+    token,
+    employee: {
+      id: employee.id,
+      name: employee.name,
+      email: employee.email,
+      role: employee.role,
+      department: employee.department,
+      adminId: employee.adminId,
+    }
+  });
 });
 
 export default router;

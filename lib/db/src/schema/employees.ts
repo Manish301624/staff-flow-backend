@@ -15,6 +15,7 @@ export const employeesTable = pgTable("employees", {
   salaryType: text("salary_type").notNull().default("monthly"),
   joiningDate: text("joining_date").notNull(),
   status: text("status").notNull().default("active"),
+  passwordHash: text("password_hash"),
   faceDescriptor: jsonb("face_descriptor").$type<number[]>(),
   facePhotoUrl: text("face_photo_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

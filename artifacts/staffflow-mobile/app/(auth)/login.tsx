@@ -150,7 +150,7 @@ export default function LoginScreen() {
         </View>
 
         {/* Demo credentials */}
-        <View style={styles.demoBox}>
+       <View style={styles.demoBox}>
           <Ionicons name="information-circle-outline" size={14} color="#7588A3" />
           <View style={styles.demoText}>
             <Text style={styles.demoLabel}>Demo: admin@staffflow.com / password123</Text>
