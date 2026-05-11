@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, employeesTable, attendanceTable } from "@workspace/db";
+import { db, employeesTable, attendanceTable, usersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { mkdirSync, writeFileSync } from "fs";
 import path from "path";
