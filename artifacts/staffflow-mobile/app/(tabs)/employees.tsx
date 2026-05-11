@@ -25,11 +25,12 @@ interface EmployeeForm {
   salaryType: string;
   joiningDate: string;
   status: string;
+  password: string;
 }
 
 const EMPTY_FORM: EmployeeForm = {
   name: "", phone: "", email: "", role: "", department: "",
-  salary: "", salaryType: "monthly", joiningDate: "", status: "active",
+  salary: "", salaryType: "monthly", joiningDate: "", status: "active", password: "",
 };
 
 function EmployeeCard({ employee, colors, onEdit, onDelete, onEnroll }: { employee: any; colors: any; onEdit: (e: any) => void; onDelete: (id: number) => void; onEnroll: (e: any) => void }) {
@@ -103,11 +104,12 @@ export default function EmployeesScreen() {
   const openEdit = (emp: any) => {
     setEditingId(emp.id);
     setForm({
-      name: emp.name, phone: emp.phone ?? "", email: emp.email ?? "",
-      role: emp.role, department: emp.department ?? "",
-      salary: String(emp.salary), salaryType: emp.salaryType,
-      joiningDate: emp.joiningDate ?? "", status: emp.status ?? "active",
-    });
+          name: emp.name, phone: emp.phone ?? "", email: emp.email ?? "",
+          role: emp.role, department: emp.department ?? "",
+          salary: String(emp.salary), salaryType: emp.salaryType,
+          joiningDate: emp.joiningDate ?? "", status: emp.status ?? "active",
+          password: "", // don't pre-fill password
+        });
     setShowModal(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
@@ -126,13 +128,16 @@ export default function EmployeesScreen() {
       Alert.alert("Error", "Enter a valid salary amount.");
       return;
     }
-    const payload = {
-      name: form.name, phone: form.phone, email: form.email || null,
-      role: form.role, department: form.department || null,
-      salary, salaryType: form.salaryType,
-      joiningDate: form.joiningDate || new Date().toISOString().split("T")[0],
-      status: form.status,
-    };
+    const payload: any = {
+          name: form.name, phone: form.phone, email: form.email || null,
+          role: form.role, department: form.department || null,
+          salary, salaryType: form.salaryType,
+          joiningDate: form.joiningDate || new Date().toISOString().split("T")[0],
+          status: form.status,
+        };
+        if (form.password) {
+          payload.password = form.password;
+        }
 
     if (editingId) {
       updateEmployee.mutate(
@@ -240,20 +245,22 @@ export default function EmployeesScreen() {
               { key: "role", label: "Role *", placeholder: "Software Engineer" },
               { key: "department", label: "Department", placeholder: "Engineering" },
               { key: "joiningDate", label: "Joining Date (YYYY-MM-DD)", placeholder: "2024-01-01" },
-            ].map(({ key, label, placeholder, keyboardType }) => (
-              <View key={key}>
-                <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>{label}</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
-                  value={(form as any)[key]}
-                  onChangeText={(v) => setForm(f => ({ ...f, [key]: v }))}
-                  placeholder={placeholder}
-                  placeholderTextColor={colors.mutedForeground}
-                  keyboardType={keyboardType as any}
-                  autoCapitalize={key === "email" ? "none" : "words"}
-                />
-              </View>
-            ))}
+              { key: "password", label: editingId ? "New Password (leave blank to keep)" : "Password *", placeholder: "Min 6 characters", secureTextEntry: true },
+             ].map(({ key, label, placeholder, keyboardType, secureTextEntry }: any) => (
+                           <View key={key}>
+                             <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>{label}</Text>
+                             <TextInput
+                               style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
+                               value={(form as any)[key]}
+                               onChangeText={(v) => setForm(f => ({ ...f, [key]: v }))}
+                               placeholder={placeholder}
+                               placeholderTextColor={colors.mutedForeground}
+                               keyboardType={keyboardType as any}
+                               autoCapitalize={key === "email" || key === "password" ? "none" : "words"}
+                               secureTextEntry={secureTextEntry ?? false}
+                             />
+                           </View>
+                         ))}
 
             <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Salary Amount *</Text>
             <TextInput
