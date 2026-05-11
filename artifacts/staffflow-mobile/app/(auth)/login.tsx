@@ -17,16 +17,18 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useLogin } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { setBaseUrl } from "@workspace/api-client-react";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
   const loginMutation = useLogin();
 
-  const [email, setEmail] = useState("admin@staffflow.com");
-  const [password, setPassword] = useState("password123");
-  const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+    const [loginType, setLoginType] = useState<"admin" | "employee">("admin");
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
+    const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
   const validate = () => {
     const e: typeof errors = {};
@@ -36,24 +38,56 @@ export default function LoginScreen() {
     return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = () => {
+const handleSubmit = async () => {
     if (!validate()) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    loginMutation.mutate(
-      { data: { email, password } },
-      {
-        onSuccess: async (response) => {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          await login(response.token, response.user as any);
-          router.replace("/(tabs)/");
-        },
-        onError: (err: any) => {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-          Alert.alert("Sign in failed", err?.data?.error || "Invalid email or password");
-        },
+    if (loginType === "admin") {
+      loginMutation.mutate(
+        { data: { email, password } },
+        {
+          onSuccess: async (response) => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            await login(response.token, response.user as any);
+            router.replace("/(tabs)/");
+          },
+          onError: (err: any) => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            Alert.alert("Sign in failed", err?.data?.error || "Invalid email or password");
+          },
+        }
+      );
+    } else {
+      // Employee login
+      try {
+        const domain = process.env.EXPO_PUBLIC_DOMAIN;
+        const baseUrl = domain ? `https://${domain}` : `http://10.0.2.2:3000`;
+        const response = await fetch(`${baseUrl}/api/auth/employee-login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          Alert.alert("Sign in failed", data.error || "Invalid email or password");
+          return;
+        }
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        await login(data.token, {
+          id: data.employee.id,
+          name: data.employee.name,
+          email: data.employee.email,
+          role: "employee",
+          companyName: "",
+          createdAt: new Date().toISOString(),
+          employeeId: data.employee.id,
+          adminId: data.employee.adminId,
+        } as any);
+        router.replace("/(employee)/");
+      } catch (err) {
+        Alert.alert("Sign in failed", "Network error. Please try again.");
       }
-    );
+    }
   };
 
   return (
@@ -80,10 +114,30 @@ export default function LoginScreen() {
           </View>
         </View>
 
-        <View style={styles.heroSection}>
-          <Text style={styles.heroTitle}>Welcome back</Text>
-          <Text style={styles.heroSubtitle}>Sign in to your admin account</Text>
-        </View>
+    <View style={styles.heroSection}>
+      <Text style={styles.heroTitle}>Welcome back</Text>
+      <Text style={styles.heroSubtitle}>
+        {loginType === "admin" ? "Sign in to your admin account" : "Sign in to your employee account"}
+      </Text>
+    </View>
+
+    {/* Login Type Toggle */}
+    <View style={styles.toggleRow}>
+      <Pressable
+        style={[styles.toggleBtn, loginType === "admin" && styles.toggleBtnActive]}
+        onPress={() => { setLoginType("admin"); setEmail(""); setPassword(""); }}
+      >
+        <Ionicons name="shield-checkmark-outline" size={16} color={loginType === "admin" ? "#fff" : "#7588A3"} />
+        <Text style={[styles.toggleBtnText, loginType === "admin" && styles.toggleBtnTextActive]}>Admin</Text>
+      </Pressable>
+      <Pressable
+        style={[styles.toggleBtn, loginType === "employee" && styles.toggleBtnActive]}
+        onPress={() => { setLoginType("employee"); setEmail(""); setPassword(""); }}
+      >
+        <Ionicons name="person-outline" size={16} color={loginType === "employee" ? "#fff" : "#7588A3"} />
+        <Text style={[styles.toggleBtnText, loginType === "employee" && styles.toggleBtnTextActive]}>Employee</Text>
+      </Pressable>
+    </View>
 
         {/* Form card */}
         <View style={styles.card}>
@@ -150,12 +204,14 @@ export default function LoginScreen() {
         </View>
 
         {/* Demo credentials */}
-       <View style={styles.demoBox}>
-          <Ionicons name="information-circle-outline" size={14} color="#7588A3" />
-          <View style={styles.demoText}>
-            <Text style={styles.demoLabel}>Demo: admin@staffflow.com / password123</Text>
+        {loginType === "admin" && (
+          <View style={styles.demoBox}>
+            <Ionicons name="information-circle-outline" size={14} color="#7588A3" />
+            <View style={styles.demoText}>
+              <Text style={styles.demoLabel}>Demo: admin@staffflow.com / password123</Text>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Register link */}
         <View style={styles.footer}>
@@ -310,11 +366,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_400Regular",
   },
-  footer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-  },
+ toggleRow: {
+     flexDirection: "row",
+     backgroundColor: "#0B111E",
+     borderRadius: 12,
+     borderWidth: 1,
+     borderColor: "#1D283A",
+     padding: 4,
+     gap: 4,
+     marginBottom: 20,
+   },
+   toggleBtn: {
+     flex: 1,
+     flexDirection: "row",
+     alignItems: "center",
+     justifyContent: "center",
+     gap: 6,
+     paddingVertical: 10,
+     borderRadius: 10,
+   },
+   toggleBtnActive: {
+     backgroundColor: "#576DFA",
+   },
+   toggleBtnText: {
+     color: "#7588A3",
+     fontSize: 14,
+     fontFamily: "Inter_600SemiBold",
+   },
+   toggleBtnTextActive: {
+     color: "#fff",
+   },
+   footer: {
+     flexDirection: "row",
+     justifyContent: "center",
+     alignItems: "center",
+   },
   footerText: {
     color: "#7588A3",
     fontSize: 14,
