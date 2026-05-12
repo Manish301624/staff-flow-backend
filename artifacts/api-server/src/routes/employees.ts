@@ -235,4 +235,24 @@ if (!valid) {
   });
 });
 
+// Admin reset employee password
+router.post("/auth/reset-employee-password", async (req, res): Promise<void> => {
+  const { email, newPassword } = req.body;
+  if (!email || !newPassword) {
+    res.status(400).json({ error: "Email and password required" });
+    return;
+  }
+  const hash = await bcrypt.hash(newPassword, 10);
+  const [employee] = await db.update(employeesTable)
+    .set({ passwordHash: hash })
+    .where(eq(employeesTable.email, email))
+    .returning();
+  if (!employee) {
+    res.status(404).json({ error: "Employee not found" });
+    return;
+  }
+  res.json({ success: true });
+});
+
+
 export default router;
