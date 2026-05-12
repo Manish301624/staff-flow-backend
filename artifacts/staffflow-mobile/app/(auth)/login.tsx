@@ -82,6 +82,7 @@ const handleSubmit = async () => {
           createdAt: new Date().toISOString(),
           employeeId: data.employee.id,
           adminId: data.employee.adminId,
+          department: data.employee.department,
         } as any);
         router.replace("/(employee)/");
       } catch (err) {

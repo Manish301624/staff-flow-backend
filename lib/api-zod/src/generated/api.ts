@@ -92,6 +92,7 @@ export const CreateEmployeeBody = zod.object({
   salary: zod.number(),
   salaryType: zod.string(),
   joiningDate: zod.string(),
+  password: zod.string().optional(),
 });
 
 /**
@@ -133,6 +134,7 @@ export const UpdateEmployeeBody = zod.object({
   salaryType: zod.string().optional(),
   joiningDate: zod.string().optional(),
   status: zod.string().optional(),
+  password: zod.string().optional(),
 });
 
 export const UpdateEmployeeResponse = zod.object({
