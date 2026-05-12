@@ -55,6 +55,9 @@ router.post("/employees", requireAuth, async (req, res): Promise<void> => {
   if (password) {
     passwordHash = await bcrypt.hash(password, 10);
   }
+ // 👇 ADD THIS LINE HERE
+  console.log("Password received:", password);
+  console.log("PasswordHash to insert:", passwordHash);
 
   const [employee] = await db.insert(employeesTable).values({
     ...employeeData,
@@ -62,6 +65,8 @@ router.post("/employees", requireAuth, async (req, res): Promise<void> => {
     salary: String(employeeData.salary),
     passwordHash,
   }).returning();
+
+ console.log("Employee saved in DB:", JSON.stringify(employee));
 
   res.status(201).json({
     ...employee,
