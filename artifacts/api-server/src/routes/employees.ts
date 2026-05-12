@@ -201,11 +201,15 @@ router.post("/auth/employee-login", async (req, res): Promise<void> => {
     return;
   }
 
-  const valid = await bcrypt.compare(password, employee.passwordHash);
-  if (!valid) {
-    res.status(401).json({ error: "Invalid credentials" });
-    return;
-  }
+console.log("Employee found:", employee.email);
+console.log("Password hash exists:", !!employee.passwordHash);
+console.log("Hash preview:", employee.passwordHash?.substring(0, 10));
+const valid = await bcrypt.compare(password, employee.passwordHash);
+console.log("Password valid:", valid);
+if (!valid) {
+  res.status(401).json({ error: "Invalid credentials" });
+  return;
+}
 
   const token = jwt.sign(
     {
