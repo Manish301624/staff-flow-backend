@@ -54,10 +54,14 @@ const queryClient = new QueryClient({
 function RootLayoutNav() {
   const { user, isLoading } = useAuth();
 
-  useEffect(() => {
+useEffect(() => {
     if (!isLoading) {
       if (user) {
-        router.replace("/(tabs)/");
+        if ((user as any).role === "employee") {
+          router.replace("/(employee)/");
+        } else {
+          router.replace("/(tabs)/");
+        }
       } else {
         router.replace("/(auth)/login");
       }
