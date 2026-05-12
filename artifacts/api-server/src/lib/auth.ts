@@ -1,10 +1,11 @@
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
 
-const JWT_SECRET = process.env.SESSION_SECRET || "staffflow-dev-secret-2024";
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET || "staffflow-dev-secret-2024";
 
 export interface JwtPayload {
-  userId: number;
+  userId?: number;
+  employeeId?: number;
   email: string;
   role: string;
   adminId: number;
@@ -27,6 +28,11 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   const token = authHeader.slice(7);
   try {
     const payload = verifyToken(token);
+    // Support both admin and employee tokens
+    if (!payload.adminId) {
+      res.status(401).json({ error: "Invalid token" });
+      return;
+    }
     (req as any).user = payload;
     next();
   } catch {
