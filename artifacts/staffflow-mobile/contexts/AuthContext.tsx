@@ -1,3 +1,4 @@
+
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
@@ -44,6 +45,15 @@ async function deleteToken() {
   }
 }
 
+function decodeToken(token: string): any {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -60,47 +70,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // Decode token to check role
+      const payload = decodeToken(token);
+
+      if (!payload) {
+        await deleteToken();
+        setIsLoading(false);
+        return;
+      }
+
+      // Check token expiry
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        await deleteToken();
+        setIsLoading(false);
+        return;
+      }
+
+      if (payload.role === "employee") {
+        // Employee token — restore from token payload directly
+        setUser({
+          id: payload.employeeId,
+          name: payload.name || "",
+          email: payload.email,
+          role: "employee",
+          companyName: "",
+          createdAt: new Date().toISOString(),
+          employeeId: payload.employeeId,
+          adminId: payload.adminId,
+        } as any);
+        setIsLoading(false);
+      } else {
+        // Admin token — use getMe()
         try {
           const userData = await getMe();
           setUser(userData as AuthUser);
         } catch {
-          // Check if token exists but getMe failed (employee token)
-          // Don't delete token — try to decode it
-          try {
-            const token = await loadToken();
-            if (token) {
-              const payload = JSON.parse(atob(token.split(".")[1]));
-              if (payload.role === "employee") {
-                // Employee token — set user from token payload
-                setUser({
-                  id: payload.employeeId,
-                  name: "",
-                  email: payload.email,
-                  role: "employee",
-                  companyName: "",
-                  createdAt: new Date().toISOString(),
-                  employeeId: payload.employeeId,
-                  adminId: payload.adminId,
-                } as any);
-              } else {
-                await deleteToken();
-              }
-            } else {
-              await deleteToken();
-            }
-          } catch {
-            await deleteToken();
-          }
+          await deleteToken();
         } finally {
           setIsLoading(false);
         }
+      }
+    }
 
     bootstrap();
   }, []);
 
   const login = async (token: string, userData: AuthUser) => {
-    await saveToken(token);
-    setAuthTokenGetter(async () => token);
+    const tokenStr = typeof token === "string" ? token : String(token);
+    await saveToken(tokenStr);
+    setAuthTokenGetter(async () => tokenStr);
     setUser(userData);
   };
 
