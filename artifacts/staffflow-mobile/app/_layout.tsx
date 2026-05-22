@@ -76,6 +76,7 @@ useEffect(() => {
       <Stack.Screen name="salary" options={{ headerShown: true, animation: "slide_from_right", title: "Salary & Payroll" }} />
       <Stack.Screen name="payments" options={{ headerShown: true, animation: "slide_from_right", title: "Payments" }} />
       <Stack.Screen name="settings" options={{ headerShown: true, animation: "slide_from_right", title: "Settings" }} />
+      <Stack.Screen name="privacy-policy" options={{ headerShown: true, title: "Privacy Policy", animation: "slide_from_right" }}/>
     </Stack>
   );
 }

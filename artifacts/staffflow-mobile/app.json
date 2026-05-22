@@ -1,22 +1,22 @@
 {
   "expo": {
-    "name": "StaffFlow",
+    "name": "HireMind",
     "slug": "staffflow-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "staffflow-mobile",
+    "scheme": "hiremind-mobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#060B18"
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": false,
       "infoPlist": {
-        "NSCameraUsageDescription": "StaffFlow needs camera access to verify employee identity for attendance."
+        "NSCameraUsageDescription": "HireMind needs camera access to verify employee identity for attendance."
       }
     },
     "android": {
@@ -25,7 +25,7 @@
         "android.permission.RECORD_AUDIO"
       ],
       "usesCleartextTraffic": true,
-      "package": "com.allegient.staffflowmobile"
+      "package": "com.allegient.hiremind"
     },
     "web": {
       "favicon": "./assets/images/icon.png"
@@ -43,7 +43,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "StaffFlow needs camera access to verify employee identity for attendance.",
+          "cameraPermission": "HireMind needs camera access to verify employee identity for attendance.",
           "microphonePermission": false
         }
       ]
@@ -56,6 +56,7 @@
       "eas": {
         "projectId": "c824bc5b-1b03-4166-b810-b71a1d2cbe7c"
       }
-    }
+    },
+    "owner": "allegient"
   }
 }

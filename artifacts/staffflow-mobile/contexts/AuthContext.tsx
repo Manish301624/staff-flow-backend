@@ -59,15 +59,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
         return;
       }
-      try {
-        const userData = await getMe();
-        setUser(userData as AuthUser);
-      } catch {
-        await deleteToken();
-      } finally {
-        setIsLoading(false);
-      }
-    }
+
+        try {
+          const userData = await getMe();
+          setUser(userData as AuthUser);
+        } catch {
+          // Check if token exists but getMe failed (employee token)
+          // Don't delete token — try to decode it
+          try {
+            const token = await loadToken();
+            if (token) {
+              const payload = JSON.parse(atob(token.split(".")[1]));
+              if (payload.role === "employee") {
+                // Employee token — set user from token payload
+                setUser({
+                  id: payload.employeeId,
+                  name: "",
+                  email: payload.email,
+                  role: "employee",
+                  companyName: "",
+                  createdAt: new Date().toISOString(),
+                  employeeId: payload.employeeId,
+                  adminId: payload.adminId,
+                } as any);
+              } else {
+                await deleteToken();
+              }
+            } else {
+              await deleteToken();
+            }
+          } catch {
+            await deleteToken();
+          }
+        } finally {
+          setIsLoading(false);
+        }
 
     bootstrap();
   }, []);
