@@ -68,6 +68,15 @@ async function deleteUser() {
   } catch (e) { console.warn("deleteUser error:", e); }
 }
 
+// ─── Token decode (employee fallback) ─────────────────────────────────────
+function decodeToken(token: string): any {
+  try {
+    const base64 = token.split(".")[1];
+    const padded  = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    return JSON.parse(atob(padded));
+  } catch { return null; }
+}
+
 // ─── Context ───────────────────────────────────────────────────────────────
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -88,13 +97,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Always try saved user first — works for both admin and employee
+      // ── Step 1: Try saved user first (works for both admin & employee) ──
       const savedUser = await loadUser();
       if (savedUser) {
         setUser(savedUser);
         setIsLoading(false);
 
-        // Only verify token for admins in background — employees don't have /api/auth/me
+        // Admin only: verify token in background via getMe()
+        // Employee skipped — they have no /api/auth/me endpoint
         if (savedUser.role !== "employee") {
           try {
             const freshUser = await getMe();
@@ -102,27 +112,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await saveUser(freshUser as AuthUser);
           } catch (err: any) {
             const status = err?.status ?? err?.response?.status ?? err?.statusCode;
-            // Only logout on real auth failure, not network errors
+            // Only logout on real 401/403 — not network errors or server down
             if (status === 401 || status === 403) {
               await deleteToken();
               await deleteUser();
               setUser(null);
             }
-            // Otherwise keep the saved user (network error, server down, etc.)
           }
         }
         return;
       }
 
-      // No saved user but token exists — must be admin (employee always has savedUser)
+      // ── Step 2: No savedUser — try getMe() for admin ──
+      // If it fails, decode token as employee fallback
       try {
         const userData = await getMe();
         setUser(userData as AuthUser);
         await saveUser(userData as AuthUser);
+        setIsLoading(false);
       } catch {
-        await deleteToken();
-        await deleteUser();
-      } finally {
+        // getMe() failed — check if employee token
+        const payload = decodeToken(token);
+        if (payload && payload.role === "employee") {
+          // Rebuild employee from JWT payload — last resort fallback
+          const empUser: any = {
+            id:          payload.employeeId ?? payload.id,
+            name:        payload.name       ?? "",
+            email:       payload.email      ?? "",
+            role:        "employee",
+            companyName: "",
+            createdAt:   new Date().toISOString(),
+            employeeId:  payload.employeeId ?? payload.id,
+            adminId:     payload.adminId    ?? null,
+            department:  payload.department ?? null,
+          };
+          setUser(empUser);
+          await saveUser(empUser); // save so next restart uses Step 1
+        } else {
+          // Real admin token but getMe() failed — clear session
+          await deleteToken();
+          await deleteUser();
+        }
         setIsLoading(false);
       }
 
@@ -134,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (token: string, userData: AuthUser) => {
     const tokenStr = typeof token === "string" ? token : String(token);
-    // Save both token and user BEFORE setting state
+    // Save both BEFORE setting state — ensures persistence before UI updates
     await saveToken(tokenStr);
     await saveUser(userData);
     setAuthTokenGetter(async () => tokenStr);
