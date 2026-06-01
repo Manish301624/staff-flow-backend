@@ -123,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = await loadToken();
     if (!token) return;
     const payload = decodeToken(token);
+    console.warn("🔍 JWT payload:", JSON.stringify(payload));
     if (!payload || isTokenExpired(payload)) return;
 
     // For employee: always restore from saved user, never call getMe()
