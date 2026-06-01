@@ -4,7 +4,7 @@ import { Platform, AppState } from "react-native";
 import { setAuthTokenGetter, getMe } from "@workspace/api-client-react";
 
 const TOKEN_KEY = "staffflow_token";
-const USER_KEY = "staffflow_user";
+const USER_KEY  = "staffflow_user";
 
 export interface AuthUser {
   id: number;
@@ -25,78 +25,57 @@ interface AuthContextType {
 // ─── Storage helpers ───────────────────────────────────────────────────────
 async function saveToken(token: string) {
   try {
-    if (Platform.OS === "web") {
-      localStorage.setItem(TOKEN_KEY, token);
-    } else {
-      await SecureStore.setItemAsync(TOKEN_KEY, token);
-    }
-  } catch (e) {
-    console.warn("saveToken error:", e);
-  }
+    if (Platform.OS === "web") localStorage.setItem(TOKEN_KEY, token);
+    else await SecureStore.setItemAsync(TOKEN_KEY, token);
+  } catch (e) { console.warn("saveToken error:", e); }
 }
 
 async function loadToken(): Promise<string | null> {
   try {
-    if (Platform.OS === "web") {
-      return localStorage.getItem(TOKEN_KEY);
-    }
+    if (Platform.OS === "web") return localStorage.getItem(TOKEN_KEY);
     return await SecureStore.getItemAsync(TOKEN_KEY);
-  } catch (e) {
-    console.warn("loadToken error:", e);
-    return null;
-  }
+  } catch (e) { console.warn("loadToken error:", e); return null; }
 }
 
+// ✅ deleteToken no longer wipes USER_KEY — they are managed separately
 async function deleteToken() {
   try {
-    if (Platform.OS === "web") {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-    } else {
-      await SecureStore.deleteItemAsync(TOKEN_KEY);
-      await SecureStore.deleteItemAsync(USER_KEY);
-    }
-  } catch (e) {
-    console.warn("deleteToken error:", e);
-  }
+    if (Platform.OS === "web") localStorage.removeItem(TOKEN_KEY);
+    else await SecureStore.deleteItemAsync(TOKEN_KEY);
+  } catch (e) { console.warn("deleteToken error:", e); }
 }
 
 async function saveUser(user: AuthUser) {
   try {
     const str = JSON.stringify(user);
-    if (Platform.OS === "web") {
-      localStorage.setItem(USER_KEY, str);
-    } else {
-      await SecureStore.setItemAsync(USER_KEY, str);
-    }
-  } catch (e) {
-    console.warn("saveUser error:", e);
-  }
+    if (Platform.OS === "web") localStorage.setItem(USER_KEY, str);
+    else await SecureStore.setItemAsync(USER_KEY, str);
+  } catch (e) { console.warn("saveUser error:", e); }
 }
 
 async function loadUser(): Promise<AuthUser | null> {
   try {
-    let str: string | null = null;
-    if (Platform.OS === "web") {
-      str = localStorage.getItem(USER_KEY);
-    } else {
-      str = await SecureStore.getItemAsync(USER_KEY);
-    }
+    const str = Platform.OS === "web"
+      ? localStorage.getItem(USER_KEY)
+      : await SecureStore.getItemAsync(USER_KEY);
     return str ? JSON.parse(str) : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
+}
+
+async function deleteUser() {
+  try {
+    if (Platform.OS === "web") localStorage.removeItem(USER_KEY);
+    else await SecureStore.deleteItemAsync(USER_KEY);
+  } catch (e) { console.warn("deleteUser error:", e); }
 }
 
 // ─── Token decode ──────────────────────────────────────────────────────────
 function decodeToken(token: string): any {
   try {
     const base64 = token.split(".")[1];
-    const padded = base64 + "=".repeat((4 - base64.length % 4) % 4);
+    const padded  = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
     return JSON.parse(atob(padded));
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 function isTokenExpired(payload: any): boolean {
@@ -104,11 +83,24 @@ function isTokenExpired(payload: any): boolean {
   return payload.exp * 1000 < Date.now();
 }
 
+// ✅ Detects employee token using every possible field your backend might use
+function isEmployeeToken(payload: any): boolean {
+  if (!payload) return false;
+  return (
+    payload.role       === "employee" ||
+    payload.type       === "employee" ||
+    payload.userType   === "employee" ||
+    payload.user_type  === "employee" ||
+    !!payload.employeeId              ||
+    !!payload.employee_id
+  );
+}
+
 // ─── Context ───────────────────────────────────────────────────────────────
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user,      setUser]      = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const bootstrapDone = useRef(false);
 
@@ -117,117 +109,132 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     bootstrap();
   }, []);
 
-  // Prevent logout on app state change (background/foreground)
+  // Re-check when app comes back to foreground
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active" && bootstrapDone.current && !user) {
-        // Re-check token silently when app comes to foreground
         silentRestore();
       }
     });
     return () => sub.remove();
   }, [user]);
 
-    async function silentRestore() {
-      const token = await loadToken();
-      if (!token) return;
+  async function silentRestore() {
+    const token = await loadToken();
+    if (!token) return;
+    const payload = decodeToken(token);
+    if (!payload || isTokenExpired(payload)) return;
 
-      const payload = decodeToken(token);
-      if (!payload || isTokenExpired(payload)) return;
-
-      // ✅ Same fix here
-      const isEmployee = payload.role === "employee" || !!payload.employeeId;
-      if (isEmployee) {
-        const savedUser = await loadUser();
-        if (savedUser) setUser(savedUser);
-      }
+    // For employee: always restore from saved user, never call getMe()
+    if (isEmployeeToken(payload)) {
+      const savedUser = await loadUser();
+      if (savedUser) setUser(savedUser);
     }
+  }
 
-    async function bootstrap() {
-      try {
-        const token = await loadToken();
-        if (!token) {
-          setIsLoading(false);
-          bootstrapDone.current = true;
-          return;
-        }
+  async function bootstrap() {
+    try {
+      const token = await loadToken();
 
-        const payload = decodeToken(token);
-
-        if (!payload) {
-          await deleteToken();
-          setIsLoading(false);
-          bootstrapDone.current = true;
-          return;
-        }
-
-        if (isTokenExpired(payload)) {
-          await deleteToken();
-          setIsLoading(false);
-          bootstrapDone.current = true;
-          return;
-        }
-
-        // ✅ Check BOTH role AND employeeId — employee tokens may not carry role field
-        const isEmployee = payload.role === "employee" || !!payload.employeeId;
-
-        if (isEmployee) {
-          // Try saved user first
-          const savedUser = await loadUser();
-          if (savedUser && (savedUser.role === "employee" || (savedUser as any).employeeId)) {
-            setUser(savedUser);
-            setIsLoading(false);
-            bootstrapDone.current = true;
-            return;
-          }
-
-          // Fallback: rebuild from token payload
-          const empUser = {
-            id: payload.employeeId ?? payload.id,
-            name: payload.name || "",
-            email: payload.email || "",
-            role: "employee",
-            companyName: "",
-            createdAt: new Date().toISOString(),
-            employeeId: payload.employeeId ?? payload.id,
-            adminId: payload.adminId,
-          } as any;
-          setUser(empUser);
-          await saveUser(empUser);
-          setIsLoading(false);
-          bootstrapDone.current = true;
-
-        } else {
-          // Admin — use getMe()
-          try {
-            const userData = await getMe();
-            setUser(userData as AuthUser);
-            await saveUser(userData as AuthUser);
-          } catch {
-            // ✅ Don't delete token blindly — only delete if truly unauthorized
-            await deleteToken();
-          } finally {
-            setIsLoading(false);
-            bootstrapDone.current = true;
-          }
-        }
-      } catch (e) {
-        console.warn("bootstrap error:", e);
+      // No token — show login
+      if (!token) {
         setIsLoading(false);
         bootstrapDone.current = true;
+        return;
       }
+
+      const payload = decodeToken(token);
+
+      // Corrupt token
+      if (!payload) {
+        await deleteToken();
+        await deleteUser();
+        setIsLoading(false);
+        bootstrapDone.current = true;
+        return;
+      }
+
+      // Expired token
+      if (isTokenExpired(payload)) {
+        await deleteToken();
+        await deleteUser();
+        setIsLoading(false);
+        bootstrapDone.current = true;
+        return;
+      }
+
+      if (isEmployeeToken(payload)) {
+        // ── Employee path: NEVER call getMe() ──────────────────────────────
+
+        // 1. Try saved user (survives tab close on web)
+        const savedUser = await loadUser();
+        if (savedUser && (savedUser.role === "employee" || (savedUser as any).employeeId)) {
+          setUser(savedUser);
+          setIsLoading(false);
+          bootstrapDone.current = true;
+          return;
+        }
+
+        // 2. Rebuild from JWT payload fields
+        const empUser: any = {
+          id:         payload.employeeId ?? payload.employee_id ?? payload.id ?? 0,
+          name:       payload.name       ?? payload.username ?? "",
+          email:      payload.email      ?? "",
+          role:       "employee",
+          companyName:"",
+          createdAt:  new Date().toISOString(),
+          employeeId: payload.employeeId ?? payload.employee_id ?? payload.id ?? 0,
+          adminId:    payload.adminId    ?? payload.admin_id,
+          department: payload.department ?? "",
+        };
+        setUser(empUser);
+        await saveUser(empUser);
+        setIsLoading(false);
+        bootstrapDone.current = true;
+
+      } else {
+        // ── Admin path: verify via getMe() ─────────────────────────────────
+        try {
+          const userData = await getMe();
+          setUser(userData as AuthUser);
+          await saveUser(userData as AuthUser);
+        } catch (err: any) {
+          // Only wipe session on actual 401 Unauthorized
+          const status = err?.status ?? err?.response?.status;
+          if (status === 401 || status === 403) {
+            await deleteToken();
+            await deleteUser();
+          } else {
+            // Network error / server down — restore from saved user
+            const savedUser = await loadUser();
+            if (savedUser) setUser(savedUser);
+          }
+        } finally {
+          setIsLoading(false);
+          bootstrapDone.current = true;
+        }
+      }
+    } catch (e) {
+      console.warn("bootstrap error:", e);
+      // Last resort: try saved user before giving up
+      const savedUser = await loadUser();
+      if (savedUser) setUser(savedUser);
+      setIsLoading(false);
+      bootstrapDone.current = true;
     }
+  }
 
   const login = async (token: string, userData: AuthUser) => {
     const tokenStr = typeof token === "string" ? token : String(token);
     await saveToken(tokenStr);
-    await saveUser(userData);
+    await saveUser(userData);                      // ← persist user immediately
     setAuthTokenGetter(async () => tokenStr);
     setUser(userData);
   };
 
   const logout = async () => {
     await deleteToken();
+    await deleteUser();
     setAuthTokenGetter(async () => null);
     setUser(null);
     bootstrapDone.current = false;
