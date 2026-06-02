@@ -13,6 +13,8 @@ export interface AuthUser {
   role: string;
   companyName: string;
   createdAt: string;
+  employeeId?: number; // Added to prevent TypeScript errors if payload structure bleeds through
+  adminId?: number;
 }
 
 interface AuthContextType {
@@ -91,10 +93,26 @@ async function loadUser(): Promise<AuthUser | null> {
 // ─── Token decode ──────────────────────────────────────────────────────────
 function decodeToken(token: string): any {
   try {
-    const base64 = token.split(".")[1];
-    const padded = base64 + "=".repeat((4 - base64.length % 4) % 4);
-    return JSON.parse(atob(padded));
-  } catch {
+    const base64Url = token.split(".")[1];
+    if (!base64Url) return null;
+
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+
+    if (Platform.OS === "web") {
+      const jsonPayload = decodeURIComponent(
+        globalThis.atob(padded)
+          .split("")
+          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+          .join("")
+      );
+      return JSON.parse(jsonPayload);
+    } else {
+      const jsonPayload = globalThis.atob(padded);
+      return JSON.parse(jsonPayload);
+    }
+  } catch (error) {
+    console.error("JWT Decode failed critically:", error);
     return null;
   }
 }
@@ -117,11 +135,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     bootstrap();
   }, []);
 
-  // Prevent logout on app state change (background/foreground)
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active" && bootstrapDone.current && !user) {
-        // Re-check token silently when app comes to foreground
         silentRestore();
       }
     });
@@ -135,12 +151,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const payload = decodeToken(token);
     if (!payload || isTokenExpired(payload)) return;
 
-    if (payload.role === "employee") {
-      // Restore from saved user data
-      const savedUser = await loadUser();
-      if (savedUser) {
-        setUser(savedUser);
-      }
+    const savedUser = await loadUser();
+    if (savedUser) {
+      setUser(savedUser);
     }
   }
 
@@ -155,60 +168,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const payload = decodeToken(token);
 
-      if (!payload) {
+      if (!payload || isTokenExpired(payload)) {
         await deleteToken();
+        setUser(null);
         setIsLoading(false);
         bootstrapDone.current = true;
         return;
       }
 
-      if (isTokenExpired(payload)) {
-        await deleteToken();
+      // 1. Always try loading completely preserved object from storage first
+      const savedUser = await loadUser();
+
+      if (savedUser) {
+        setUser(savedUser);
         setIsLoading(false);
         bootstrapDone.current = true;
-        return;
-      }
 
-      if (payload.role === "employee") {
-        // Try to load saved user first
-        const savedUser = await loadUser();
-        if (savedUser && savedUser.role === "employee") {
-          setUser(savedUser);
-          setIsLoading(false);
-          bootstrapDone.current = true;
-          return;
+        // Background sync for Admins only
+        if (savedUser.role !== "employee") {
+          getMe().then(async (freshData) => {
+            setUser(freshData as AuthUser);
+            await saveUser(freshData as AuthUser);
+          }).catch(() => console.log("Silent admin refresh failed"));
         }
+        return;
+      }
 
-        // Fallback: restore from token
-        const empUser = {
-          id: payload.employeeId,
-          name: payload.name || "",
-          email: payload.email,
+      // 2. Fallback execution if savedUser is corrupted/missing but token is alive
+      if (payload.role === "employee") {
+        const empUser: AuthUser = {
+          id: Number(payload.employeeId || payload.id || 0),
+          name: payload.name || "Employee",
+          email: payload.email || "",
           role: "employee",
-          companyName: "",
-          createdAt: new Date().toISOString(),
+          companyName: payload.companyName || "My Company",
+          createdAt: payload.createdAt || new Date().toISOString(),
           employeeId: payload.employeeId,
-          adminId: payload.adminId,
-        } as any;
+          adminId: payload.adminId
+        };
         setUser(empUser);
         await saveUser(empUser);
-        setIsLoading(false);
-        bootstrapDone.current = true;
       } else {
-        // Admin — use getMe()
-        try {
-          const userData = await getMe();
-          setUser(userData as AuthUser);
-          await saveUser(userData as AuthUser);
-        } catch {
-          await deleteToken();
-        } finally {
-          setIsLoading(false);
-          bootstrapDone.current = true;
-        }
+        const userData = await getMe();
+        setUser(userData as AuthUser);
+        await saveUser(userData as AuthUser);
       }
+
     } catch (e) {
-      console.warn("bootstrap error:", e);
+      console.warn("Bootstrap structural error:", e);
+    } finally {
       setIsLoading(false);
       bootstrapDone.current = true;
     }
@@ -216,10 +224,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (token: string, userData: AuthUser) => {
     const tokenStr = typeof token === "string" ? token : String(token);
+
+    // Normalize data schema structure before sending to storage
+    const normalizedUser: AuthUser = {
+      ...userData,
+      id: Number(userData.id || userData.employeeId || 0),
+      role: userData.role || "employee"
+    };
+
     await saveToken(tokenStr);
-    await saveUser(userData);
+    await saveUser(normalizedUser);
     setAuthTokenGetter(async () => tokenStr);
-    setUser(userData);
+    setUser(normalizedUser);
   };
 
   const logout = async () => {
