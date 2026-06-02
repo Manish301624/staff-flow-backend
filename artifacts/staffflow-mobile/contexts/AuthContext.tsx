@@ -179,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // 1. Always try loading completely preserved object from storage first
       const savedUser = await loadUser();
 
-      if (savedUser) {
+      if (savedUser && savedUser.role) {
         setUser(savedUser);
         setIsLoading(false);
         bootstrapDone.current = true;
@@ -203,8 +203,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: "employee",
           companyName: payload.companyName || "My Company",
           createdAt: payload.createdAt || new Date().toISOString(),
-          employeeId: payload.employeeId,
-          adminId: payload.adminId
+          employeeId: Number(payload.employeeId || payload.id || 0),
+          adminId: payload.adminId ? Number(payload.adminId) : undefined
         };
         setUser(empUser);
         await saveUser(empUser);
@@ -229,7 +229,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const normalizedUser: AuthUser = {
       ...userData,
       id: Number(userData.id || userData.employeeId || 0),
-      role: userData.role || "employee"
+      role: userData.role || "employee",
+      companyName: userData.companyName || "StaffFlow Org",
+      createdAt: userData.createdAt || new Date().toISOString()
     };
 
     await saveToken(tokenStr);

@@ -58,33 +58,35 @@ const handleSubmit = async () => {
         }
       );
     } else {
-      // Employee login
-      try {
-        const domain = process.env.EXPO_PUBLIC_DOMAIN;
-        const baseUrl = domain ? `https://${domain}` : `http://10.0.2.2:3000`;
-        const response = await fetch(`${baseUrl}/api/auth/employee-login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        });
-        const data = await response.json();
-        if (!response.ok) {
-          Alert.alert("Sign in failed", data.error || "Invalid email or password");
-          return;
-        }
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        await login(data.token, {
-          id: data.employee.id,
-          name: data.employee.name,
-          email: data.employee.email,
-          role: "employee",
-          companyName: "",
-          createdAt: new Date().toISOString(),
-          employeeId: data.employee.id,
-          adminId: data.employee.adminId,
-          department: data.employee.department,
-        } as any);
-        router.replace("/(employee)/");
+     // Employee login
+           try {
+             const domain = process.env.EXPO_PUBLIC_DOMAIN;
+             const baseUrl = domain ? `https://${domain}` : `http://10.0.2.2:3000`;
+             const response = await fetch(`${baseUrl}/api/auth/employee-login`, {
+               method: "POST",
+               headers: { "Content-Type": "application/json" },
+               body: JSON.stringify({ email, password }),
+             });
+             const data = await response.json();
+             if (!response.ok) {
+               Alert.alert("Sign in failed", data.error || "Invalid email or password");
+               return;
+             }
+             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+             // Pass complete normalized structures to prevent layout level drops
+             await login(data.token, {
+               id: Number(data.employee.id),
+               name: data.employee.name || "Employee",
+               email: data.employee.email,
+               role: "employee",
+               companyName: data.employee.companyName || "StaffFlow Org",
+               createdAt: data.employee.createdAt || new Date().toISOString(),
+               employeeId: Number(data.employee.id),
+               adminId: data.employee.adminId ? Number(data.employee.adminId) : undefined,
+             } as any);
+
+             router.replace("/(employee)/");
       } catch (err) {
         Alert.alert("Sign in failed", "Network error. Please try again.");
       }
