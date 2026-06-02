@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, type ReactNode 
 import * as SecureStore from "expo-secure-store";
 import { Platform, AppState } from "react-native";
 import { setAuthTokenGetter, getMe } from "@workspace/api-client-react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const TOKEN_KEY = "staffflow_token";
 const USER_KEY = "staffflow_user";
@@ -51,43 +52,35 @@ async function loadToken(): Promise<string | null> {
 
 async function deleteToken() {
   try {
-    if (Platform.OS === "web") {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-    } else {
-      await SecureStore.deleteItemAsync(TOKEN_KEY);
-      await SecureStore.deleteItemAsync(USER_KEY);
-    }
-  } catch (e) {
-    console.warn("deleteToken error:", e);
-  }
+    if (Platform.OS === "web") localStorage.removeItem(TOKEN_KEY);
+    else await SecureStore.deleteItemAsync(TOKEN_KEY);
+    // ← removed USER_KEY deletion from here
+  } catch (e) { console.warn("deleteToken error:", e); }
 }
 
 async function saveUser(user: AuthUser) {
   try {
     const str = JSON.stringify(user);
-    if (Platform.OS === "web") {
-      localStorage.setItem(USER_KEY, str);
-    } else {
-      await SecureStore.setItemAsync(USER_KEY, str);
-    }
-  } catch (e) {
-    console.warn("saveUser error:", e);
-  }
+    if (Platform.OS === "web") localStorage.setItem(USER_KEY, str);
+    else await AsyncStorage.setItem(USER_KEY, str);
+  } catch (e) { console.warn("saveUser error:", e); }
 }
 
 async function loadUser(): Promise<AuthUser | null> {
   try {
     let str: string | null = null;
-    if (Platform.OS === "web") {
-      str = localStorage.getItem(USER_KEY);
-    } else {
-      str = await SecureStore.getItemAsync(USER_KEY);
-    }
+    if (Platform.OS === "web") str = localStorage.getItem(USER_KEY);
+    else str = await AsyncStorage.getItem(USER_KEY);
     return str ? JSON.parse(str) : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
+}
+
+
+async function deleteUser() {
+  try {
+    if (Platform.OS === "web") localStorage.removeItem(USER_KEY);
+    else await AsyncStorage.removeItem(USER_KEY);
+  } catch (e) { console.warn("deleteUser error:", e); }
 }
 
 // ─── Token decode ──────────────────────────────────────────────────────────
@@ -240,13 +233,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(normalizedUser);
   };
 
-  const logout = async () => {
-    await deleteToken();
-    setAuthTokenGetter(async () => null);
-    setUser(null);
-    bootstrapDone.current = false;
-  };
-
+const logout = async () => {
+  await deleteToken();
+  await deleteUser();          // ← add this
+  setAuthTokenGetter(async () => null);
+  setUser(null);
+  bootstrapDone.current = false;
+};
   return (
     <AuthContext.Provider value={{ user, isLoading, login, logout }}>
       {children}

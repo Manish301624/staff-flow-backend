@@ -6,7 +6,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, router , useNavigationContainerRef } from "expo-router";
+import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -53,44 +53,21 @@ const queryClient = new QueryClient({
 
 function RootLayoutNav() {
   const { user, isLoading } = useAuth();
-  const rootNavigationRef = useNavigationContainerRef();
 
   useEffect(() => {
-    // 1. Exit immediately if SecureStore data is still being read
-    if (isLoading) return;
+    if (isLoading) return; // ← bootstrap not done yet, do nothing
 
-    let isMounted = true;
+    if (user?.role === "employee") {
+      router.replace("/(employee)");
+    } else if (user) {
+      router.replace("/(tabs)/");
+    } else {
+      router.replace("/(auth)/login");
+    }
+  }, [user, isLoading]);
 
-    const performNavigation = () => {
-      // 2. Ensure the underlying navigation container tree is completely ready
-      if (!rootNavigationRef?.current || !isMounted) return;
-
-      if (user && user.role) {
-        console.log("[NAV] Navigating active user with role:", user.role);
-        if (user.role === "employee") {
-          router.replace("/(employee)");
-        } else {
-          router.replace("/(tabs)/");
-        }
-      } else {
-        console.log("[NAV] No active user session detected. Directing to login.");
-        router.replace("/(auth)/login");
-      }
-    };
-
-    // 3. We poll check or delay safely until the native mobile rendering thread finishes layout matching
-    const checkInterval = setInterval(() => {
-      if (rootNavigationRef?.current) {
-        clearInterval(checkInterval);
-        performNavigation();
-      }
-    }, 50);
-
-    return () => {
-      isMounted = false;
-      clearInterval(checkInterval);
-    };
-  }, [user, isLoading, rootNavigationRef]);
+  // Show nothing while bootstrap runs — prevents ANY navigation before user is loaded
+  if (isLoading) return null;
 
   return (
     <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
@@ -101,7 +78,7 @@ function RootLayoutNav() {
       <Stack.Screen name="salary" options={{ headerShown: true, animation: "slide_from_right", title: "Salary & Payroll" }} />
       <Stack.Screen name="payments" options={{ headerShown: true, animation: "slide_from_right", title: "Payments" }} />
       <Stack.Screen name="settings" options={{ headerShown: true, animation: "slide_from_right", title: "Settings" }} />
-      <Stack.Screen name="privacy-policy" options={{ headerShown: true, title: "Privacy Policy", animation: "slide_from_right" }}/>
+      <Stack.Screen name="privacy-policy" options={{ headerShown: true, title: "Privacy Policy", animation: "slide_from_right" }} />
     </Stack>
   );
 }
