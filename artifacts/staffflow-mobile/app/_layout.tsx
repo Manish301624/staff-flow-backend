@@ -55,17 +55,26 @@ function RootLayoutNav() {
   const { user, isLoading } = useAuth();
 
 useEffect(() => {
-    if (!isLoading) {
-      if (user) {
-        if ((user as any).role === "employee") {
+    // 1. If it's still loading secure store data, do absolutely nothing
+    if (isLoading) return;
+
+    // 2. Wrap routing inside a requestAnimationFrame or short timeout
+    // to allow Expo Router navigation state to initialize fully on mobile boot
+    const timer = setTimeout(() => {
+      if (user && user.role) {
+        console.log("Root Layout detected active user with role:", user.role);
+        if (user.role === "employee") {
           router.replace("/(employee)/");
         } else {
           router.replace("/(tabs)/");
         }
       } else {
+        console.log("Root Layout detected no user. Sending to login.");
         router.replace("/(auth)/login");
       }
-    }
+    }, 10);
+
+    return () => clearTimeout(timer);
   }, [user, isLoading]);
 
   return (
