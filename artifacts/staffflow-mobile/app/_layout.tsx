@@ -6,7 +6,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, router } from "expo-router";
+import { Stack, router , useNavigationContainerRef } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -53,29 +53,44 @@ const queryClient = new QueryClient({
 
 function RootLayoutNav() {
   const { user, isLoading } = useAuth();
+  const rootNavigationRef = useNavigationContainerRef();
 
-useEffect(() => {
-    // 1. If it's still loading secure store data, do absolutely nothing
+  useEffect(() => {
+    // 1. Exit immediately if SecureStore data is still being read
     if (isLoading) return;
 
-    // 2. Wrap routing inside a requestAnimationFrame or short timeout
-    // to allow Expo Router navigation state to initialize fully on mobile boot
-    const timer = setTimeout(() => {
+    let isMounted = true;
+
+    const performNavigation = () => {
+      // 2. Ensure the underlying navigation container tree is completely ready
+      if (!rootNavigationRef?.current || !isMounted) return;
+
       if (user && user.role) {
-        console.log("Root Layout detected active user with role:", user.role);
+        console.log("[NAV] Navigating active user with role:", user.role);
         if (user.role === "employee") {
-          router.replace("/(employee)/");
+          router.replace("/(employee)");
         } else {
           router.replace("/(tabs)/");
         }
       } else {
-        console.log("Root Layout detected no user. Sending to login.");
+        console.log("[NAV] No active user session detected. Directing to login.");
         router.replace("/(auth)/login");
       }
-    }, 10);
+    };
 
-    return () => clearTimeout(timer);
-  }, [user, isLoading]);
+    // 3. We poll check or delay safely until the native mobile rendering thread finishes layout matching
+    const checkInterval = setInterval(() => {
+      if (rootNavigationRef?.current) {
+        clearInterval(checkInterval);
+        performNavigation();
+      }
+    }, 50);
+
+    return () => {
+      isMounted = false;
+      clearInterval(checkInterval);
+    };
+  }, [user, isLoading, rootNavigationRef]);
 
   return (
     <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
