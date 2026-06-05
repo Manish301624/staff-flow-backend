@@ -80,7 +80,7 @@ const handleSubmit = async () => {
                name: data.employee.name || "Employee",
                email: data.employee.email,
                role: "employee",
-               companyName: data.employee.companyName || "StaffFlow Org",
+               companyName: data.employee.companyName || "HireMind Org",
                createdAt: data.employee.createdAt || new Date().toISOString(),
                employeeId: Number(data.employee.id),
                adminId: data.employee.adminId ? Number(data.employee.adminId) : undefined,
